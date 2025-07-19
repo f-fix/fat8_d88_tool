@@ -105,7 +105,7 @@ Here's the BASIC program I typed in for key recovery:
 ```
 The BASIC program also demonstrates decryption using the combined key, without reference to the key data in ROM.
 
-Here's the combined key material from CK.DAT: _(this is just the second 143-byte block of my saved BASIC file with a repeating 11... 1 counter subtracted from each byte, it does not contain any NEC ROM data)_
+Here's the combined key material from CK.DAT: _(this is just the second 143-byte block of my saved BASIC file with a repeating 11... 1 down-counter subtracted from each byte, it does not contain any NEC ROM data)_
 ```python
 PC88_COMBINED_KEY = (
     0xC0, 0xCF, 0xCC, 0x85, 0x62, 0x81, 0x0C, 0x42, 0xC3, 0x04, 0xE5,
@@ -121,5 +121,64 @@ PC88_COMBINED_KEY = (
     0x21, 0xFB, 0x06, 0xA8, 0x2B, 0xA7, 0x0E, 0x97, 0x35, 0xE5, 0xB4,
     0xC9, 0x2E, 0xF0, 0x41, 0x7C, 0xBD, 0xAD, 0xB1, 0x37, 0x38, 0x44,
     0x1D, 0x3F, 0x18, 0x94, 0x8A, 0x54, 0xFA, 0xAB, 0x94, 0x1E, 0x46,
+)
+```
+# Unrelated bonux: de-obfuscation, GW-BASIC version
+Basically the same method, with minimal changes for later FAT and syntax changes, works for getting a combined key for obfuscated GW-BASIC saves. I think it's not relevant for FAT8 so the script in this repo does not include it, but here it is for posterity:
+```basic
+10 ' The length of the comment is important. Do not change it! It needs to leave the first byte of KP$ at file offset 143. ''''''
+20 KP$="ìîïèëêçåàäâéüìîïèëêçåàäâéüìîïèëêçåàäâéüìîïèëêçåàäâéüìîïèëêçåàäâéüìîïèëêçåàäâéüìîïèëêçåàäâéüìîïèëêçåàäâéüìîïèëêçåàäâéüìîïèëêçåàäâéüìîïèëêçåàäâéü"
+30 WIDTH 80:SCREEN,,0:CLS
+40 V1$="":FOR J=11 TO 1 STEP -1:FOR I=13 TO 1 STEP -1:V1$=V1$+CHR$(128+I):NEXT I:NEXT J
+50 IF KP$<>V1$ THEN PRINT"Program is corrupt. Re-enter:":PRINT"20 KP$="+CHR$(34)+V1$+CHR$(34):STOP
+60 PRINT"Saving known plaintext in temporary file TMP.BAS."
+70 SAVE"TMP.BAS"
+80 PRINT"Verifying known plaintext in temporary file TMP.BAS."
+90 OPEN"TMP.BAS"FOR INPUT AS #1
+100 XP$=INPUT$(143,1) ' Padding
+110 VP$=INPUT$(143,1) ' To verify
+120 CLOSE #1
+130 KILL"TMP.BAS"
+140 PRINT"Removing temporary file TMP.BAS."
+150 IF KP$<>VP$ THEN PRINT"KP$<>VP$":PRINT"KP$:";KP$:PRINT"VP$:"VP$:STOP
+160 PRINT"Saving ciphertext in temporary file TMP.BAS."
+170 SAVE"TMP.BAS",P
+180 PRINT"Reading cyphertext from temporary file TMP.BAS."
+190 OPEN"TMP.BAS"FOR INPUT AS #1
+200 CX$=INPUT$(143,1) ' Padding
+210 CT$=INPUT$(143,1) ' To verify
+220 CLOSE #1
+230 KILL"TMP.BAS"
+240 PRINT"Removing temporary file TMP.BAS."
+250 CK$="":FOR I=0 TO 142:CK$=CK$+CHR$(((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR 128):NEXT I
+260 PRINT"Combined key:":FOR I=1 TO LEN(CK$):PRINT MID$(HEX$(256+ASC(MID$(CK$,I,1))),2);" ";:NEXT I:PRINT
+270 DC$="":FOR I=0 TO LEN(CT$)-1:DC$=DC$+CHR$(((((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR ASC(MID$(CK$,1+(I MOD 143),1)))+13-(I MOD 13))MOD 256):NEXT I
+280 IF KP$<>DC$ THEN PRINT"KP$<>DC$":PRINT"KP$:";KP$:PRINT"DC$:"DC$:STOP
+290 PRINT"Combined key has been verified to decrypt plaintext without ROM data."
+300 PRINT"Saving combined key in CK.DAT."
+310 OPEN"CK.DAT" FOR OUTPUT AS #1
+320 PRINT #1,CK$;
+330 CLOSE #1
+340 PRINT"Done."
+350 END
+```
+The BASIC program also demonstrates decryption using the combined key, without reference to the key data in GW-BASIC's binary executable.
+
+Here's the combined key material from CK.DAT: _(this is just the second 143-byte block of my saved BASIC file with a repeating 11... 1 down-counter subtracted from each byte, it does not contain any data from GW-BASIC's binary executable)_
+```python
+DOS_V_COMBINED_KEY = (
+   0xE0, 0x49, 0x67, 0xB7, 0x46, 0xAD, 0xEC, 0x5D, 0xE9, 0x83, 0xF5,
+   0x90, 0x17, 0x8C, 0x93, 0x0D, 0x55, 0xA6, 0x6B, 0x09, 0xE6, 0x15,
+   0x9D, 0x63, 0xFC, 0xCD, 0xE2, 0x71, 0xED, 0x93, 0x47, 0xD4, 0xF5,
+   0xB6, 0x83, 0xC7, 0xB9, 0x92, 0x2F, 0x02, 0xB7, 0x10, 0x2C, 0xBB,
+   0xEC, 0x63, 0xA2, 0x59, 0xAD, 0x5B, 0x72, 0xE9, 0xE3, 0x10, 0xF4,
+   0x04, 0x2D, 0x98, 0xB9, 0xCC, 0xBB, 0x4D, 0x9D, 0x93, 0x52, 0x1F,
+   0x20, 0x66, 0x70, 0xF7, 0xFE, 0x5B, 0x2C, 0x7D, 0xB0, 0x26, 0x6F,
+   0x6A, 0x89, 0x4C, 0xC0, 0x06, 0x15, 0x1E, 0x9D, 0xC9, 0xC6, 0x54,
+   0xF6, 0xF9, 0x16, 0x53, 0x22, 0x5E, 0xE6, 0xD3, 0xFF, 0x26, 0x35,
+   0xD6, 0xC6, 0x62, 0x23, 0x80, 0xB1, 0xC2, 0x9C, 0x07, 0x6C, 0x03,
+   0xF6, 0xA3, 0x82, 0x20, 0x0C, 0xC1, 0xA0, 0x77, 0x23, 0x23, 0xFB,
+   0x44, 0x95, 0x62, 0x79, 0xEC, 0xFE, 0xEC, 0x07, 0x7D, 0xD0, 0xDF,
+   0xFD, 0x6D, 0x30, 0x4F, 0x0C, 0x9B, 0x0C, 0x3C, 0x09, 0xC0, 0x81,
 )
 ```
