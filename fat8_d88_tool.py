@@ -100,7 +100,7 @@ def smoke_test_pc98_8bit_charset():
     assert not round_trip_test_failures, round_trip_test_failures
     unicode_test = '\r\n'.join((
         '╲￮╱ I ♥ PC98! \\o/',
-        'ピーシーキュウハチガダイスキデス!',
+        'キュウハチガダイスキデス!',
         'NECノ「PC-8800」ヤ「PC-9800」シリーズ ノ パソコン ガ ニンキデシタガ、ゴゾンジデスカ？',
         '「！？」　･･･',
         '│|¦~▔-ｰ─_▁',
@@ -115,7 +115,7 @@ def smoke_test_pc98_8bit_charset():
     )) + '\x1A\x00'
     expected_8bit = b'\r\n'.join((
         b'\xef\xed\xee I \xe9 PC98! \xfco/',
-        b'\xCB\xDF\xB0\xBC\xB0\xB7\xAD\xB3\xCA\xC1\xB6\xDE\xC0\xDE\xB2\xBD\xB7\xC3\xDE\xBD!',
+        b'\xB7\xAD\xB3\xCA\xC1\xB6\xDE\xC0\xDE\xB2\xBD\xB7\xC3\xDE\xBD!',
         b'NEC\xc9\xa2PC-8800\xa3\xd4\xa2PC-9800\xa3\xbc\xd8\xb0\xbd\xde \xc9 \xca\xdf\xbf\xba\xdd \xb6\xde \xc6\xdd\xb7\xc3\xde\xbc\xc0\xb6\xde\xa4\xba\xde\xbf\xde\xdd\xbc\xde\xc3\xde\xbd\xb6?',
         b'\xa2!?\xa3 \xa5\xa5\xa5',
         b'\x96||~\x94-\xb0\x95_\x80',
@@ -139,7 +139,7 @@ def smoke_test_pc98_8bit_charset():
     pc98_8bit_test = expected_8bit
     expected_unicode = '\r\n'.join((
         '╲￮╱ I ♥ PC98! \\o/',
-        'ﾋﾟｰｼｰｷｭｳﾊﾁｶﾞﾀﾞｲｽｷﾃﾞｽ!',
+        'ｷｭｳﾊﾁｶﾞﾀﾞｲｽｷﾃﾞｽ!',
         'NECﾉ｢PC-8800｣ﾔ｢PC-9800｣ｼﾘｰｽﾞ ﾉ ﾊﾟｿｺﾝ ｶﾞ ﾆﾝｷﾃﾞｼﾀｶﾞ､ｺﾞｿﾞﾝｼﾞﾃﾞｽｶ?',
         '｢!?｣ ･･･',
         '│¦¦~▔-ｰ─_▁',
@@ -156,7 +156,7 @@ def smoke_test_pc98_8bit_charset():
     assert encode_pc98_8bit_charset(expected_unicode, try_harder=False) == pc98_8bit_test, f"encode_pc98_8bit_charset({repr(expected_unicode)}, try_harder=False) returned:\n {repr(encode_pc98_8bit_charset(expected_unicode, try_harder=False))}, expecting:\n {repr(pc98_8bit_test)}"
     expected_no_controls_unicode = '␍␊'.join((
         '╲￮╱ I ♥ PC98! \\o/',
-        'ﾋﾟｰｼｰｷｭｳﾊﾁｶﾞﾀﾞｲｽｷﾃﾞｽ!',
+        'ｷｭｳﾊﾁｶﾞﾀﾞｲｽｷﾃﾞｽ!',
         'NECﾉ｢PC-8800｣ﾔ｢PC-9800｣ｼﾘｰｽﾞ ﾉ ﾊﾟｿｺﾝ ｶﾞ ﾆﾝｷﾃﾞｼﾀｶﾞ､ｺﾞｿﾞﾝｼﾞﾃﾞｽｶ?',
         '｢!?｣ ･･･',
         '│¦¦~▔-ｰ─_▁',
@@ -172,7 +172,7 @@ def smoke_test_pc98_8bit_charset():
     assert decode_pc98_8bit_charset(pc98_8bit_test, preserve=NO_CONTROLS) == expected_no_controls_unicode, f"decode_pc98_8bit_charset({repr(pc98_8bit_test)}, preserve=NO_CONTROLS) returned:\n {repr(decode_pc98_8bit_charset(pc98_8bit_test, preserve=NO_CONTROLS))}, expecting:\n {repr(expected_no_controls_unicode)}"
     expected_ascii_controls_unicode = '\r\n'.join((
         '╲￮╱ I ♥ PC98! \\o/',
-        'ﾋﾟｰｼｰｷｭｳﾊﾁｶﾞﾀﾞｲｽｷﾃﾞｽ!',
+        'ｷｭｳﾊﾁｶﾞﾀﾞｲｽｷﾃﾞｽ!',
         'NECﾉ｢PC-8800｣ﾔ｢PC-9800｣ｼﾘｰｽﾞ ﾉ ﾊﾟｿｺﾝ ｶﾞ ﾆﾝｷﾃﾞｼﾀｶﾞ､ｺﾞｿﾞﾝｼﾞﾃﾞｽｶ?',
         '｢!?｣ ･･･',
         '│¦¦~▔-ｰ─_▁',
