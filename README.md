@@ -1,2 +1,119 @@
 # fat8_d88_tool
-extract files from FAT8-formatted disks stored in the D88 image format
+This tool extracts files from FAT8-formatted disks stored in the D88 image format.
+
+# Usage
+`python3 fat_d88_tool.py PATH/TO/MY/DISK.D88`
+... if all goes well, this will output somevery verbose log messages and then create a sub-directory of the current working directory named `DISK [FAT8 Contents]` or similar (possibly with a parenthesized numeric suffix to avoid other ones) with some files inside it. If you are especially fortunate, some of those files may contain the data you were hoping to recover.
+
+# Why?
+Why am I sharing it here when the code is terrible? In case you want to use it on a disk other tools won't touch.
+
+# History
+After a lot of banging my head against the wall and AI's, and eventually rewriting most of the logic after discovering the AI-written code was almost universally wrong, I now have a Python script _(which is uglier than sin and still needs a bunch of cleanup, it started in chatgpt and I have yet to make it not terrible code-wise)_ that can decode FAT8-formatted D88 disk images and dump the files from them into a directory. It doesn't seem to croak or corrupt the extracted files the way other tools do.
+
+Working: D88 FAT8 extraction. Tested with a handful of disk images from PC66, PC66SR, PC88 and PC98. For PC98 and PC88 at least it knows how to deobfuscate "protected" saves too. Implements the 8-bit/single-byte Japanese character sets for PC88/PC98 and PC-6001 series.
+
+Still TODO: a lot of stuff, including cleaning up the code, adding support for multi-disk D88 files, adding support for other charsets, decoding tokenized BASIC into ASCII, and probably a whole lot more...
+
+# System detection
+The FAT8 used on these various NEC PC's seems to have varied a bit in terms of where the metadata track (containing directory, autostart/ID information, and triplicate FAT) is stored, and also in terms of how it is laid out. At the moment the disk parameters (especially the number of sides) and information about the sectors in tracks 0 and 1 (especially the size of the first sector in track 0 along with its contents) are used to attempt to determine which flavor is used. This also determines which character set will be used when constructing filenames or displaying hexadecimal dumps or other debug information.
+
+If a disk has only one side, or the boot system begins with `RXR!` or `SYS!`, it is treated as a disk from the PC-6001 series. The `RXR!` type boot sector (preceding letters from `SYS!`) indicates SR.
+
+For a two-sided disk, a 128-byte boot sector is treated as a PC98 disk, and everything else as a PC88 disk.
+
+# 8-bit/single-byte character set used for PC88/PC98
+I am sure this is not the best way to solve this. This mapping should work OK for PC-8001 series, PC-8801 series, and PC-98/PC-9821 series and compatibles when displaying an 8-bit character set with no kanji support. Once a kanji ROM gets involved the problem gets a whole lot trickier since these "narrow" single-byte characters map to the same Unicode as those double-byte (but sometimes single-width!) ones. In some cases those are visually distinct, in other cases not. In any case, there will be ambiguity or other escaping mechanisms will be needed. Characters from the private use area are used to handle various unassigned or ambiguous mappings. I considered '\N{no-break space}' for b'\xA0' but it seems semantically wrong. The kanji here are supposed to be halfwidth but Unicode lacks a way to express that.
+```
+␀␁␂␃␄␅␆␇␈␉␊␋␌␍␎␏␐␑␒␓␔␕␖␗␘␙␚␛￫￩￪￬
+ !"#$%&'()*+,-./0123456789:;<=>?
+@ABCDEFGHIJKLMNOPQRSTUVWXYZ[¥]^_
+`abcdefghijklmnopqrstuvwxyz{¦}~␡
+▁▂▃▄▅▆▇█▏▎▍▌▋▊▉┼┴┬┤├▔─│▕┌┐└┘╭╮╰╯
+｡｢｣､･ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ
+ﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ
+═╞╪╡◢◣◥◤♠♥♦♣•￮╱╲╳円年月日時分秒\
+```
+
+# 8-bit/single-byte character set used for PC-6001/mkII/SR and PC-6601/SR (Mr. PC)
+I am sure this is not the best way to solve this. This mapping should work OK for PC-6001/mkII/SR and PC-6601/SR. It does not handle the alternate character set shift sequences well. It also does not handle Kanji or PC-6001A charset at all! the mapping is intentionally close to the PC-98 one above. The hiragana and kanji here should all be half-width ones, but Unicode is missing those so we live with fullwidth instead.
+
+Primary character set:
+```
+␀␁␂␃␄␅␆␇␈␉␊␋␌␍␎␏␐␑␒␓␔␕␖␗␘␙␚␛￫￩￪￬
+ !"#$%&'()*+,-./0123456789:;<=>?
+@ABCDEFGHIJKLMNOPQRSTUVWXYZ[¥]^_
+`abcdefghijklmnopqrstuvwxyz{¦}~␡
+♠♥♦♣￮•をぁぃぅぇぉゃゅょっーあいうえおかきくけこさしすせそ
+｡｢｣､･ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ
+ﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ
+たちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわん
+```
+Alternate character set:
+```
+月火水木金土日年円時分秒百千万
+π┴┬┤├┼│─┌┐└┘╳大中小
+```
+
+# De-obfuscation, PC98 version
+Sometimes on FAT8 PC98 disks written using N88-BASIC(86) (disk version) the saved data is obfuscated (specified by `,P` at time of `SAVE` or `BSAVE`.) I saved a file of my own and read back the bytes and they were all rotating one bit position compared to their original values! Rotating the opposite direction will fix it. For these files the tool generates both the obfuscated and deobfuscated versions, since many other tools still lack support for the obfuscation mechanism.
+
+# De-obfuscation, PC88 version
+NEC PC-88 obfuscated ("encrypted") BASIC saves use a pair of XOR keys which are stored in ROM, using the algorithm previously documented here: https://robhagemans.github.io/pcbasic/doc/2.0/#protected-file-format - but with different key data. One key has length 11, the other has length 13. A byte from each one is XOR'ed with each byte being de-obfuscated/decrypted or obfuscated/encrypted. However, you can de-obfuscate/decrypt (or obfuscate/encrypt) the save data just fine without the ROM data, provided you have a "combined XOR key" which is 11*13 = 143 bytes long. It turns out you can get BASIC to save this key as part of your program, provided you have the right string in your program at the right position. So, I wrote a program to do this and recovered the "combined XOR key" from my save file.
+
+Here's the BASIC program I typed in for key recovery:
+```basic
+10 ' The length of the comment is important. Do not change it! It needs to leave the first byte of KP$ at file offset 143. '''''''
+20 KP$="▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂"
+30 WIDTH 80:SCREEN,,0:CLS
+40 V1$="":FOR J=11 TO 1 STEP -1:FOR I=13 TO 1 STEP -1:V1$=V1$+CHR$(128+I):NEXT I:NEXT J
+50 IF KP$<>V1$ THEN PRINT"Program is corrupt. Re-enter:":PRINT"20 KP$="+CHR$(34)+V1$+CHR$(34):STOP
+60 PRINT"Saving known plaintext in temporary file TMP."
+70 SAVE"TMP"
+80 PRINT"Verifying known plaintext in temporary file TMP."
+90 OPEN"TMP"FOR INPUT AS #1
+100 XP$=INPUT$(143,1) ' Padding
+110 VP$=INPUT$(143,1) ' To verify
+120 CLOSE #1
+130 KILL"TMP"
+140 PRINT"Removing temporary file TMP."
+150 IF KP$<>VP$ THEN PRINT"KP$<>VP$":PRINT"KP$:";KP$:PRINT"VP$:"VP$:STOP
+160 PRINT"Saving ciphertext in temporary file TMP."
+170 SAVE"TMP",P
+180 PRINT"Reading cyphertext from temporary file TMP."
+190 OPEN"TMP"FOR INPUT AS #1
+200 CX$=INPUT$(143,1) ' Padding
+210 CT$=INPUT$(143,1) ' To verify
+220 CLOSE #1
+230 KILL"TMP"
+240 PRINT"Removing temporary file TMP."
+250 CK$="":FOR I=0 TO 142:CK$=CK$+CHR$(((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR 128):NEXT I
+260 PRINT"Combined key:":FOR I=1 TO LEN(CK$):PRINT MID$(HEX$(256+ASC(MID$(CK$,I,1))),2);" ";:NEXT I:PRINT
+270 DC$="":FOR I=0 TO LEN(CT$)-1:DC$=DC$+CHR$(((((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR ASC(MID$(CK$,1+(I MOD 143),1)))+13-(I MOD 13))MOD 256):NEXT I
+280 IF KP$<>DC$ THEN PRINT"KP$<>DC$":PRINT"KP$:";KP$:PRINT"DC$:"DC$:STOP
+290 PRINT"Combined key has been verified to decrypt plaintext without ROM data."
+300 PRINT"Saving combined key in CK.DAT."
+310 OPEN"CK.DAT" FOR OUTPUT AS #1
+320 PRINT #1,CK$;
+330 CLOSE #1
+340 PRINT"Done."
+350 END
+```
+Here's the combined key material from CK.DAT:
+```python
+PC88_COMBINED_KEY = (
+    0xC0, 0xCF, 0xCC, 0x85, 0x62, 0x81, 0x0C, 0x42, 0xC3, 0x04, 0xE5,
+    0xE6, 0xCD, 0x11, 0x75, 0xB6, 0x90, 0xE4, 0x97, 0x35, 0xED, 0xB2,
+    0xFC, 0x6E, 0x37, 0x77, 0x6B, 0x60, 0x30, 0x86, 0xDD, 0x38, 0x44,
+    0x15, 0x39, 0x2D, 0xD4, 0x4D, 0x62, 0xED, 0x76, 0x09, 0x29, 0xAC,
+    0xC0, 0xCF, 0xC4, 0x83, 0x57, 0xC1, 0xCB, 0x74, 0xD4, 0xD9, 0x78,
+    0xD1, 0x27, 0x11, 0x75, 0xBE, 0x96, 0xD1, 0xD7, 0xF2, 0xDB, 0xA5,
+    0x21, 0xF3, 0x00, 0x9D, 0x6B, 0x60, 0x38, 0x80, 0xE8, 0x78, 0x83,
+    0x23, 0x2E, 0xF0, 0x49, 0x7A, 0x88, 0xED, 0x76, 0x01, 0x2F, 0x99,
+    0x80, 0x08, 0xF2, 0x94, 0x8A, 0x5C, 0xFC, 0x9E, 0xD4, 0xD9, 0x70,
+    0xD7, 0x12, 0x51, 0xB2, 0x88, 0x81, 0x0C, 0x4A, 0xC5, 0x31, 0xA5,
+    0x21, 0xFB, 0x06, 0xA8, 0x2B, 0xA7, 0x0E, 0x97, 0x35, 0xE5, 0xB4,
+    0xC9, 0x2E, 0xF0, 0x41, 0x7C, 0xBD, 0xAD, 0xB1, 0x37, 0x38, 0x44,
+    0x1D, 0x3F, 0x18, 0x94, 0x8A, 0x54, 0xFA, 0xAB, 0x94, 0x1E, 0x46,
+)
+```
