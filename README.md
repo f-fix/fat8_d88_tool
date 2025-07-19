@@ -2,7 +2,10 @@
 This tool extracts files from FAT8-formatted disks stored in the D88 image format.
 
 # Usage
-`python3 fat_d88_tool.py PATH/TO/MY/DISK.D88`
+At your shell prompt:
+```bash
+python3 fat_d88_tool.py PATH/TO/MY/DISK.D88
+```
 ... if all goes well, this will output somevery verbose log messages and then create a sub-directory of the current working directory named `DISK [FAT8 Contents]` or similar (possibly with a parenthesized numeric suffix to avoid other ones) with some files inside it. If you are especially fortunate, some of those files may contain the data you were hoping to recover.
 
 # Why?
