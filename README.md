@@ -99,7 +99,9 @@ Here's the BASIC program I typed in for key recovery:
 340 PRINT"Done."
 350 END
 ```
-Here's the combined key material from CK.DAT:
+The BASIC program also demonstrates decryption using the combined key, without reference to the key data in ROM.
+
+Here's the combined key material from CK.DAT: _(this is just the second 143-byte block of my saved BASIC file with a repeating 11... 1 counter subtracted from each byte, it does not contain any NEC ROM data)_
 ```python
 PC88_COMBINED_KEY = (
     0xC0, 0xCF, 0xCC, 0x85, 0x62, 0x81, 0x0C, 0x42, 0xC3, 0x04, 0xE5,
