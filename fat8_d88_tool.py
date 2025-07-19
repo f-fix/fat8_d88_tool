@@ -1005,7 +1005,7 @@ if boot_sector is not None:
     with open(boot_sector_filename, "wb") as f:
         print(f"writing {boot_sector_filename}")
         f.write(boot_sector)
-    with open(utf8_dump_filename(boot_sector_filename), "w") as f:
+    with open(utf8_dump_filename(boot_sector_filename), "w", encoding="utf-8") as f:
         print(f"writing {utf8_dump_filename(boot_sector_filename)}")
         f.write(decode_8bit_charset(boot_sector))
 
@@ -1017,7 +1017,7 @@ for vsec_num in sorted(dir_sector_indices):
     with open(dir_sector_filename, "wb") as f:
         print(f"writing {dir_sector_filename}")
         f.write(sector_data)
-    with open(utf8_dump_filename(dir_sector_filename), "w") as f:
+    with open(utf8_dump_filename(dir_sector_filename), "w", encoding="utf-8") as f:
         print(f"writing {utf8_dump_filename(dir_sector_filename)}")
         f.write(decode_8bit_charset(sector_data))
 
@@ -1026,7 +1026,7 @@ if autorun_data is not None:
     with open(autorun_filename, "wb") as f:
         print(f"writing {autorun_filename}")
         f.write(autorun_data)
-    with open(utf8_dump_filename(autorun_filename), "w") as f:
+    with open(utf8_dump_filename(autorun_filename), "w", encoding="utf-8") as f:
         print(f"writing {utf8_dump_filename(autorun_filename)}")
         f.write(decode_8bit_charset(autorun_data))
 
@@ -1035,7 +1035,7 @@ for fat_sector_idx, fat in sorted(fat_sectors.items()):
     with open(fat_filename, "wb") as f:
         print(f"writing {fat_filename}")
         f.write(fat)
-    with open(utf8_dump_filename(fat_filename), "w") as f:
+    with open(utf8_dump_filename(fat_filename), "w", encoding="utf-8") as f:
         print(f"writing {utf8_dump_filename(fat_filename)}")
         f.write(decode_8bit_charset(fat))
 
@@ -1047,7 +1047,7 @@ for idx, entry in sorted((ent['idx'], ent) for ent in directory_entries):
         with open(entry_filename, "wb") as f:
             print(f"writing {entry_filename}")
             f.write(file_data)
-        with open(utf8_dump_filename(entry_filename), "w") as f:
+        with open(utf8_dump_filename(entry_filename), "w", encoding="utf-8") as f:
             print(f"writing {utf8_dump_filename(entry_filename)}")
             f.write(decode_8bit_charset(file_data))
         if ATTR_OBFUSCATED in entry['fattrs']:
@@ -1056,6 +1056,6 @@ for idx, entry in sorted((ent['idx'], ent) for ent in directory_entries):
             with open(entry_deobf_filename, "wb") as f:
                 print(f"writing {entry_deobf_filename}")
                 f.write(file_deobf_data)
-            with open(utf8_dump_filename(entry_deobf_filename), "w") as f:
+            with open(utf8_dump_filename(entry_deobf_filename), "w", encoding="utf-8") as f:
                 print(f"writing {utf8_dump_filename(entry_deobf_filename)}")
                 f.write(decode_8bit_charset(file_deobf_data))
