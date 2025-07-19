@@ -1,0 +1,35 @@
+10 ' The length of the comment is important. Do not change it! It needs to leave the first byte of KP$ at file offset 143. '''''''
+20 KP$="Œ‹Š‰ˆ‡†…„ƒ‚Œ‹Š‰ˆ‡†…„ƒ‚Œ‹Š‰ˆ‡†…„ƒ‚Œ‹Š‰ˆ‡†…„ƒ‚Œ‹Š‰ˆ‡†…„ƒ‚Œ‹Š‰ˆ‡†…„ƒ‚Œ‹Š‰ˆ‡†…„ƒ‚Œ‹Š‰ˆ‡†…„ƒ‚Œ‹Š‰ˆ‡†…„ƒ‚Œ‹Š‰ˆ‡†…„ƒ‚Œ‹Š‰ˆ‡†…„ƒ‚"
+30 WIDTH 80:SCREEN,,0:CLS
+40 V1$="":FOR J=11 TO 1 STEP -1:FOR I=13 TO 1 STEP -1:V1$=V1$+CHR$(128+I):NEXT I:NEXT J
+50 IF KP$<>V1$ THEN PRINT"Program is corrupt. Re-enter:":PRINT"20 KP$="+CHR$(34)+V1$+CHR$(34):STOP
+60 PRINT"Saving known plaintext in temporary file TMP."
+70 SAVE"TMP"
+80 PRINT"Verifying known plaintext in temporary file TMP."
+90 OPEN"TMP"FOR INPUT AS #1
+100 XP$=INPUT$(143,1) ' Padding
+110 VP$=INPUT$(143,1) ' To verify
+120 CLOSE #1
+130 KILL"TMP"
+140 PRINT"Removing temporary file TMP."
+150 IF KP$<>VP$ THEN PRINT"KP$<>VP$":PRINT"KP$:";KP$:PRINT"VP$:"VP$:STOP
+160 PRINT"Saving ciphertext in temporary file TMP."
+170 SAVE"TMP",P
+180 PRINT"Reading cyphertext from temporary file TMP."
+190 OPEN"TMP"FOR INPUT AS #1
+200 CX$=INPUT$(143,1) ' Padding
+210 CT$=INPUT$(143,1) ' To verify
+220 CLOSE #1
+230 KILL"TMP"
+240 PRINT"Removing temporary file TMP."
+250 CK$="":FOR I=0 TO 142:CK$=CK$+CHR$(((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR 128):NEXT I
+260 PRINT"Combined key:":FOR I=1 TO LEN(CK$):PRINT MID$(HEX$(256+ASC(MID$(CK$,I,1))),2);" ";:NEXT I:PRINT
+270 DC$="":FOR I=0 TO LEN(CT$)-1:DC$=DC$+CHR$(((((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR ASC(MID$(CK$,1+(I MOD 143),1)))+13-(I MOD 13))MOD 256):NEXT I
+280 IF KP$<>DC$ THEN PRINT"KP$<>DC$":PRINT"KP$:";KP$:PRINT"DC$:"DC$:STOP
+290 PRINT"Combined key has been verified to decrypt plaintext without ROM data."
+300 PRINT"Saving combined key in CK.DAT."
+310 OPEN"CK.DAT" FOR OUTPUT AS #1
+320 PRINT #1,CK$;
+330 CLOSE #1
+340 PRINT"Done."
+350 END
