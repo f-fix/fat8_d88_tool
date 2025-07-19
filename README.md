@@ -123,7 +123,7 @@ PC88_COMBINED_KEY = (
     0x1D, 0x3F, 0x18, 0x94, 0x8A, 0x54, 0xFA, 0xAB, 0x94, 0x1E, 0x46,
 )
 ```
-# Unrelated bonux: de-obfuscation, GW-BASIC version
+# Unrelated bonus! De-obfuscation, GW-BASIC version
 Basically the same method, with minimal changes for later FAT and syntax changes, works for getting a combined key for obfuscated GW-BASIC saves. I think it's not relevant for FAT8 so the script in this repo does not include it, but here it is for posterity:
 ```basic
 10 ' The length of the comment is important. Do not change it! It needs to leave the first byte of KP$ at file offset 143. ''''''
