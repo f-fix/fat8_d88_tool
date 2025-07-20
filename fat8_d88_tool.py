@@ -7,6 +7,136 @@ import os.path
 import sys
 import unicodedata
 
+KNOWN_FAT8_FMTS = {
+    'PC-9800 3.5" 2DD/5.25" 2DD': dict(
+        # from PC-9801UV21 BASIC User's Manual
+        tracks=80,
+        sides=2,
+        sectors=16,
+        sector1_start_hints={},
+        charset='pc98-8bit',
+        obfuscation='pc98',
+        metadata_track=40,
+        metadata_side=0,
+        clusters_per_track=1,
+    ),
+    'PC-9800 8" 2D/3.5" 2HD/5.25" 2HD': dict(
+        # from PC-9801UV21 BASIC User's Manual
+        tracks=77,
+        sides=2,
+        sectors=26,
+        sector1_start_hints={
+            lambda sector1: len(sector1) == 128,
+        },
+        charset='pc98-8bit',
+        obfuscation='pc98',
+        metadata_track=35,
+        metadata_side=0,
+        clusters_per_track=1,
+    ),
+    'PC-8000/PC-8800 5.25" 1D': dict(
+        # from PC-8801 mkII BASIC User's Manual
+        #      PC-8001 mkII SR N80SR-BASIC Reference Manual
+        #      PC-8001 N-BASIC Programming Textbook
+        tracks=35,
+        sides=1,
+        sectors=16,
+        sector1_start_hints={},
+        charset='pc98-8bit',
+        obfuscation='pc88',
+        metadata_track=18,
+        metadata_side=0,
+        clusters_per_track=2,
+    ),
+    'PC-8000/PC-8800 5.25" 2D': dict(
+        # from PC-8801 mkII MR N88-BASIC / N88-Japanese BASIC Guide Book
+        #      PC-8801 mkII BASIC User's Manual
+        #      PC-8001 mkII SR N80SR-BASIC Reference Manual 
+        tracks=40,
+        sides=2,
+        sectors=16,
+        sector1_start_hints={},
+        charset='pc98-8bit',
+        obfuscation='pc88',
+        metadata_track=18,
+        metadata_side=1,
+        clusters_per_track=2,
+    ),
+    'PC-8801 mkII 8" 2D/5.25" 2HD': dict(
+        # from PC-8801 mkII MR N88-BASIC / N88-Japanese BASIC Guide Book
+        #      PC-8801 mkII BASIC User's Manual
+        #      PC-8001 mkII SR N80SR-BASIC Reference Manual
+        tracks=77,
+        sides=2,
+        sectors=26,
+        sector1_start_hints={
+            lambda sector1: len(sector1) != 128,
+        },
+        charset='pc98-8bit',
+        obfuscation='pc88',
+        metadata_track=35,
+        metadata_side=0,
+        clusters_per_track=1,
+    ),
+    'PC-6601 5.25" 1D': dict(
+        # from PC 6001mk II User Manual
+        tracks=35,
+        sides=1,
+        sectors=16,
+        sector1_start_hints={
+            lambda sector1: sector1.startswith(b'SYS'),  # seen in the wild
+        },
+        charset='pc6001-8bit',
+        obfuscation=None,
+        metadata_track=18,
+        metadata_side=0,
+        clusters_per_track=2,
+    ),
+    'PC-6601 SR 3.5" 1DD (wild type)': dict(
+        # seen in the wild
+        tracks=81,
+        sides=1,
+        sectors=16,
+        sector1_start_hints={
+            lambda sector1: sector1.startswith(b'IPL'),  # seen in the wild
+            lambda sector1: sector1.startswith(b'RXR'),  # seen in the wild
+        },
+        charset='pc6001-8bit',
+        obfuscation=None,
+        metadata_track=37,
+        metadata_side=0,
+        clusters_per_track=2,
+    ),
+    'PC-6601 3.5" 1DD (wild type)': dict(
+        # seen in the wild
+        tracks=40,
+        sides=1,
+        sectors=16,
+        sector1_start_hints={
+            lambda sector1: sector1.startswith(b'SYS'),  # seen in the wild
+        },
+        charset='pc6001-8bit',
+        obfuscation=None,
+        metadata_track=18,
+        metadata_side=0,
+        clusters_per_track=2,
+    ),
+    'Pasopia 5.25" 2D (wild type)': dict(
+        # seen in the wild
+        tracks=40,
+        sides=2,
+        sectors=16,
+        sector1_start_hints={
+            lambda sector1: sector1.startswith(b'\0\0\0\0'),  # seen in the wild
+        },
+        charset='pc98-8bit',
+        obfuscation=None,
+        metadata_track=18,
+        metadata_side=0,
+        clusters_per_track=2,
+    ),
+}
+
 NO_CONTROLS = b''
 MINIMAL_CONTROLS = b'\0\r\n\x1A\x7F'
 ASCII_CONTROLS = bytes([i for i in range(0x20)] + [0x7F])
@@ -24,16 +154,16 @@ ASCII_CONTROLS = bytes([i for i in range(0x20)] + [0x7F])
 # considered '\N{no-break space}' for b'\xA0' but it seems
 # semantically wrong. the kanji here are supposed to be halfwidth but
 # unicode lacks a way to express that.
-PC98_8BIT_CHARSET = ''.join([
-    '␀␁␂␃␄␅␆␇␈␉␊␋␌␍␎␏␐␑␒␓␔␕␖␗␘␙␚␛￫￩￪￬',
-    ' !"#$%&\'()*+,-./0123456789:;<=>?',
-    '@ABCDEFGHIJKLMNOPQRSTUVWXYZ[¥]^_',
-    '`abcdefghijklmnopqrstuvwxyz{¦}~␡',
-    '▁▂▃▄▅▆▇█▏▎▍▌▋▊▉┼┴┬┤├▔─│▕┌┐└┘╭╮╰╯',
-    '\uf8f0｡｢｣､･ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ',
-    'ﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ',
-    '═╞╪╡◢◣◥◤♠♥♦♣•￮╱╲╳円年月日時分秒\uf8f4\uf8f5\uf8f6\uf8f7\N{reverse solidus}\uf8f1\uf8f2\uf8f3',
-])
+PC98_8BIT_CHARSET = (
+    '␀␁␂␃␄␅␆␇␈␉␊␋␌␍␎␏␐␑␒␓␔␕␖␗␘␙␚␛￫￩￪￬'
+    ' !"#$%&\'()*+,-./0123456789:;<=>?'
+    '@ABCDEFGHIJKLMNOPQRSTUVWXYZ[¥]^_'
+    '`abcdefghijklmnopqrstuvwxyz{¦}~␡'
+    '▁▂▃▄▅▆▇█▏▎▍▌▋▊▉┼┴┬┤├▔─│▕┌┐└┘╭╮╰╯'
+    '\uf8f0｡｢｣､･ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ'
+    'ﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ'
+    '═╞╪╡◢◣◥◤♠♥♦♣•￮╱╲╳円年月日時分秒\uf8f4\uf8f5\uf8f6\uf8f7\N{reverse solidus}\uf8f1\uf8f2\uf8f3'
+)
 assert len(PC98_8BIT_CHARSET) == 256
 PC98_8BIT_CHARMAP = {
     PC98_8BIT_CHARSET[i]: bytes([i])
@@ -196,21 +326,21 @@ smoke_test_pc98_8bit_charset()
 # intentionally close to the PC-98 one above. the hiragana and kanji
 # here should all be half-width ones, but Unicode is missing those so
 # we live with fullwidth instead.
-PC6001_8BIT_CHARSET = ''.join([
-    '␀␁␂␃␄␅␆␇␈␉␊␋␌␍␎␏␐␑␒␓␔␕␖␗␘␙␚␛￫￩￪￬',
-    ' !"#$%&\'()*+,-./0123456789:;<=>?',
-    '@ABCDEFGHIJKLMNOPQRSTUVWXYZ[¥]^_',
-    '`abcdefghijklmnopqrstuvwxyz{¦}~␡',
-    '♠♥♦♣￮•をぁぃぅぇぉゃゅょっーあいうえおかきくけこさしすせそ',
-    '\uf8f0｡｢｣､･ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ',
-    'ﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ',
-    'たちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわん\uf8f2\uf8f3',
-])
+PC6001_8BIT_CHARSET = (
+    '␀␁␂␃␄␅␆␇␈␉␊␋␌␍␎␏␐␑␒␓␔␕␖␗␘␙␚␛￫￩￪￬'
+    ' !"#$%&\'()*+,-./0123456789:;<=>?'
+    '@ABCDEFGHIJKLMNOPQRSTUVWXYZ[¥]^_'
+    '`abcdefghijklmnopqrstuvwxyz{¦}~␡'
+    '♠♥♦♣￮•をぁぃぅぇぉゃゅょっーあいうえおかきくけこさしすせそ'
+    '\uf8f0｡｢｣､･ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ'
+    'ﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ'
+    'たちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわん\uf8f2\uf8f3'
+)
 assert len(PC6001_8BIT_CHARSET) == 256
-PC6001_8BIT_ALTCHARSET = ''.join([
-    '\uf8f1月火水木金土日年円時分秒百千万',
-    'π┴┬┤├┼│─┌┐└┘╳大中小',
-])
+PC6001_8BIT_ALTCHARSET = (
+    '\uf8f1月火水木金土日年円時分秒百千万'
+    'π┴┬┤├┼│─┌┐└┘╳大中小'
+)
 assert len(PC6001_8BIT_ALTCHARSET) == 32
 PC6001_8BIT_CHARMAP = {
     PC6001_8BIT_CHARSET[i]: bytes([i])
@@ -387,6 +517,151 @@ def smoke_test_pc6001_8bit_charset():
 
 smoke_test_pc6001_8bit_charset()
 
+def deobfuscate_byte_pc98(i, byt):
+    # N88-BASIC(86) uses a simple bit-rotation
+    return ((byt & 0x7F) << 1) | ((byt & 0x80) >> 7)
+
+def obfuscate_byte_pc98(i, byt):
+    # N88-BASIC(86) uses a simple bit-rotation
+    return ((byt & 0xFE) >> 1) | ((byt & 0x01) << 7)
+
+def smoke_test_pc98_deobfuscation():
+    for i in range(256):
+        assert deobfuscate_byte_pc98(0, obfuscate_byte_pc98(0, i)) == i
+        assert deobfuscate_byte_pc98(i, obfuscate_byte_pc98(i, i)) == i
+        assert obfuscate_byte_pc98(i, 0x00) == 0x00
+        assert obfuscate_byte_pc98(i, 0xFF) == 0xFF
+        assert obfuscate_byte_pc98(i, 0x55) == 0xAA
+        assert obfuscate_byte_pc98(i, 0xAA) == 0x55
+        assert obfuscate_byte_pc98(i, 0x80) == 0x40
+        assert obfuscate_byte_pc98(i, 0x40) == 0x20
+        assert obfuscate_byte_pc98(i, 0x20) == 0x10
+        assert obfuscate_byte_pc98(i, 0x10) == 0x08
+        assert obfuscate_byte_pc98(i, 0x08) == 0x04
+        assert obfuscate_byte_pc98(i, 0x04) == 0x02
+        assert obfuscate_byte_pc98(i, 0x02) == 0x01
+        assert obfuscate_byte_pc98(i, 0x01) == 0x80
+        assert deobfuscate_byte_pc98(i, 0x00) == 0x00
+        assert deobfuscate_byte_pc98(i, 0xFF) == 0xFF
+        assert deobfuscate_byte_pc98(i, 0x55) == 0xAA
+        assert deobfuscate_byte_pc98(i, 0xAA) == 0x55
+        assert deobfuscate_byte_pc98(i, 0x40) == 0x80
+        assert deobfuscate_byte_pc98(i, 0x20) == 0x40
+        assert deobfuscate_byte_pc98(i, 0x10) == 0x20
+        assert deobfuscate_byte_pc98(i, 0x08) == 0x10
+        assert deobfuscate_byte_pc98(i, 0x04) == 0x08
+        assert deobfuscate_byte_pc98(i, 0x02) == 0x04
+        assert deobfuscate_byte_pc98(i, 0x01) == 0x02
+        assert deobfuscate_byte_pc98(i, 0x80) == 0x01
+
+smoke_test_pc98_deobfuscation()
+
+# NEC PC-88 obfuscated ("encrypted") BASIC saves use a pair of XOR
+# keys which are stored in ROM, using the algorithm previously
+# documented here:
+# https://robhagemans.github.io/pcbasic/doc/2.0/#protected-file-format
+# - but with different key data. One key has length 11, the other has
+# length 13. A byte from each one is XOR'ed with each byte being
+# de-obfuscated/decrypted or obfuscated/encrypted. However, you can
+# de-obfuscate/decrypt (or obfuscate/encrypt) the save data just fine
+# without the ROM data, provided you have a "combined XOR key" which
+# is 11*13 = 143 bytes long. It turns out you can get BASIC to save
+# this key as part of your program, provided you have the right string
+# in your program at the right position. So, I wrote a program to do
+# this and recovered the "combined XOR key" from my save file.
+#
+# Here's the BASIC program I typed in for key recovery:
+# ```basic
+# 10 ' The length of the comment is important. Do not change it! It needs to leave the first byte of KP$ at file offset 143. '''''''
+# 20 KP$="▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂"
+# 30 WIDTH 80:SCREEN,,0:CLS
+# 40 V1$="":FOR J=11 TO 1 STEP -1:FOR I=13 TO 1 STEP -1:V1$=V1$+CHR$(128+I):NEXT I:NEXT J
+# 50 IF KP$<>V1$ THEN PRINT"Program is corrupt. Re-enter:":PRINT"20 KP$="+CHR$(34)+V1$+CHR$(34):STOP
+# 60 PRINT"Saving known plaintext in temporary file TMP."
+# 70 SAVE"TMP"
+# 80 PRINT"Verifying known plaintext in temporary file TMP."
+# 90 OPEN"TMP"FOR INPUT AS #1
+# 100 XP$=INPUT$(143,1) ' Padding
+# 110 VP$=INPUT$(143,1) ' To verify
+# 120 CLOSE #1
+# 130 KILL"TMP"
+# 140 PRINT"Removing temporary file TMP."
+# 150 IF KP$<>VP$ THEN PRINT"KP$<>VP$":PRINT"KP$:";KP$:PRINT"VP$:"VP$:STOP
+# 160 PRINT"Saving ciphertext in temporary file TMP."
+# 170 SAVE"TMP",P
+# 180 PRINT"Reading cyphertext from temporary file TMP."
+# 190 OPEN"TMP"FOR INPUT AS #1
+# 200 CX$=INPUT$(143,1) ' Padding
+# 210 CT$=INPUT$(143,1) ' To verify
+# 220 CLOSE #1
+# 230 KILL"TMP"
+# 240 PRINT"Removing temporary file TMP."
+# 250 CK$="":FOR I=0 TO 142:CK$=CK$+CHR$(((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR 128):NEXT I
+# 260 PRINT"Combined key:":FOR I=1 TO LEN(CK$):PRINT MID$(HEX$(256+ASC(MID$(CK$,I,1))),2);" ";:NEXT I:PRINT
+# 270 DC$="":FOR I=0 TO LEN(CT$)-1:DC$=DC$+CHR$(((((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR ASC(MID$(CK$,1+(I MOD 143),1)))+13-(I MOD 13))MOD 256):NEXT I
+# 280 IF KP$<>DC$ THEN PRINT"KP$<>DC$":PRINT"KP$:";KP$:PRINT"DC$:"DC$:STOP
+# 290 PRINT"Combined key has been verified to decrypt plaintext without ROM data."
+# 300 PRINT"Saving combined key in CK.DAT."
+# 310 OPEN"CK.DAT" FOR OUTPUT AS #1
+# 320 PRINT #1,CK$;
+# 330 CLOSE #1
+# 340 PRINT"Done."
+# 350 END
+# ```
+
+# Here's the combined key material from CK.DAT:
+PC88_COMBINED_KEY = (
+    0xC0, 0xCF, 0xCC, 0x85, 0x62, 0x81, 0x0C, 0x42, 0xC3, 0x04, 0xE5,
+    0xE6, 0xCD, 0x11, 0x75, 0xB6, 0x90, 0xE4, 0x97, 0x35, 0xED, 0xB2,
+    0xFC, 0x6E, 0x37, 0x77, 0x6B, 0x60, 0x30, 0x86, 0xDD, 0x38, 0x44,
+    0x15, 0x39, 0x2D, 0xD4, 0x4D, 0x62, 0xED, 0x76, 0x09, 0x29, 0xAC,
+    0xC0, 0xCF, 0xC4, 0x83, 0x57, 0xC1, 0xCB, 0x74, 0xD4, 0xD9, 0x78,
+    0xD1, 0x27, 0x11, 0x75, 0xBE, 0x96, 0xD1, 0xD7, 0xF2, 0xDB, 0xA5,
+    0x21, 0xF3, 0x00, 0x9D, 0x6B, 0x60, 0x38, 0x80, 0xE8, 0x78, 0x83,
+    0x23, 0x2E, 0xF0, 0x49, 0x7A, 0x88, 0xED, 0x76, 0x01, 0x2F, 0x99,
+    0x80, 0x08, 0xF2, 0x94, 0x8A, 0x5C, 0xFC, 0x9E, 0xD4, 0xD9, 0x70,
+    0xD7, 0x12, 0x51, 0xB2, 0x88, 0x81, 0x0C, 0x4A, 0xC5, 0x31, 0xA5,
+    0x21, 0xFB, 0x06, 0xA8, 0x2B, 0xA7, 0x0E, 0x97, 0x35, 0xE5, 0xB4,
+    0xC9, 0x2E, 0xF0, 0x41, 0x7C, 0xBD, 0xAD, 0xB1, 0x37, 0x38, 0x44,
+    0x1D, 0x3F, 0x18, 0x94, 0x8A, 0x54, 0xFA, 0xAB, 0x94, 0x1E, 0x46,
+)
+
+def deobfuscate_byte_pc88(i, byt):
+    # PC88 BASIC uses the same algorithm as
+    # https://robhagemans.github.io/pcbasic/doc/2.0/#protected-file-format
+    # but different key material.
+    return (range(13, 0, -1)[i%13] + (((byt + 0x100 - range(11, 0, -1)[i%11]) % 0x100) ^ PC88_COMBINED_KEY[i%(11*13)])) % 0x100
+
+def obfuscate_byte_pc88(i, byt):
+    # PC88 BASIC uses the same algorithm as
+    # https://robhagemans.github.io/pcbasic/doc/2.0/#protected-file-format
+    # but different key material.
+    return (range(11, 0, -1)[i%11] + (((byt + 0x100 - range(13, 0, -1)[i%13]) % 0x100) ^ PC88_COMBINED_KEY[i%(11*13)])) % 0x100
+
+def smoke_test_p88_deobfuscation():
+    kp = encode_pc98_8bit_charset('▊▋▌▍▎▏█▇▆▅▄▃▂') * 11
+    assert len(kp) == 11 * 13
+    vp = bytes([128 + 13 - i for i in range(13)] * 11)
+    assert len(vp) == 11 * 13
+    assert kp == vp, f"{kp} vs. {vp}"
+    ct = bytes([obfuscate_byte_pc88(i, kp[i]) for i in range(len(kp))])
+    assert len(ct) == 11 * 13
+    assert ct != kp
+    dc = bytes([deobfuscate_byte_pc88(i, ct[i]) for i in range(len(ct))])
+    assert len(dc) == 11 * 13
+    assert dc == kp
+    ck = tuple([((ct[i] + 0x100 - 11 + (i % 11)) % 0x100) ^ 0x80 for i in range(len(ct))])
+    assert ck == PC88_COMBINED_KEY, f"ck={ck} vs. PC88_COMBINED_KEY={PC88_COMBINED_KEY}"
+    for i in range(256):
+        assert deobfuscate_byte_pc88(0, obfuscate_byte_pc88(0, i)) == i
+        assert deobfuscate_byte_pc88(i, obfuscate_byte_pc88(i, i)) == i
+        assert deobfuscate_byte_pc88(i, obfuscate_byte_pc88(i, 0x00)) == 0x00
+        assert deobfuscate_byte_pc88(i, obfuscate_byte_pc88(i, 0x55)) == 0x55
+        assert deobfuscate_byte_pc88(i, obfuscate_byte_pc88(i, 0xAA)) == 0xAA
+        assert deobfuscate_byte_pc88(i, obfuscate_byte_pc88(i, 0xFF)) == 0xFF
+
+smoke_test_p88_deobfuscation()
+
 TRACK_TABLE_OFFSET = 0x20
 TRACK_ENTRY_SIZE = 4
 SECTOR_HEADER_SIZE = 16
@@ -505,11 +780,13 @@ FAT8_METADATA_CLUSTER_PC88 = 0x4A
 FAT8_METADATA_CLUSTER_PC98 = 0x46
 FAT8_METADATA_CLUSTER_PC66 = 0x24
 FAT8_METADATA_CLUSTER_PC66SR = 0x4A
+FAT8_METADATA_CLUSTER_PC98_ALT = 0x50
+FAT8_METADATA_CLUSTER_PASOPIA = 0x49
 
 boot_sector = ([sector_data for sec_num, actual_data_offset, sector_data, sectors_in_track in sum([sectors for (trk, side), sectors in track_sector_map.items() if trk == 0 and side == 0], []) if sec_num == 1][:1] or [None])[0]
 
-is_pc66sr_rxr = boot_sector is not None and boot_sector.startswith(b'RXR!')
-is_pc66_sys = boot_sector is not None and boot_sector.startswith(b'SYS!')
+is_pc66sr_rxr = boot_sector is not None and (boot_sector.startswith(b'RXR') or boot_sector.startswith(b'IPL'))
+is_pc66_sys = boot_sector is not None and boot_sector.startswith(b'SYS')
 is_pc98_sys = boot_sector is not None and len(boot_sector) == 128
 fat8_sectors_per_track = max(sectors for (trk, side), sectors in nominal_sectors_in_track.items() if trk in (0, 1) and side == 0)
 fat8_sides = 1 + max(side for trk, side in nominal_sectors_in_track.keys() if trk in (0, 1))
@@ -519,8 +796,18 @@ while fat8_sector_size > 0x100 and fat8_sectors_per_track < 16:
     fat8_sector_shift += 1
     fat8_sector_size >>= 1
     fat8_sectors_per_track <<= 1
+
 fat8_metadata_cluster = FAT8_METADATA_CLUSTER_PC66SR if is_pc66sr_rxr else FAT8_METADATA_CLUSTER_PC66 if is_pc66_sys or fat8_sides == 1 else FAT8_METADATA_CLUSTER_PC98 if is_pc98_sys else FAT8_METADATA_CLUSTER_PC88
-decode_8bit_charset, encode_8bit_charset = (decode_pc6001_8bit_charset, encode_pc6001_8bit_charset) if is_pc66_sys or fat8_sides == 1 else (decode_pc98_8bit_charset, encode_pc98_8bit_charset)
+fat8_8bit_charset, decode_8bit_charset, encode_8bit_charset = (
+    ('pc6001-8bit', decode_pc6001_8bit_charset, encode_pc6001_8bit_charset)
+    if is_pc66_sys or fat8_sides == 1 else
+    ('pc98-8bit', decode_pc98_8bit_charset, encode_pc98_8bit_charset)
+)
+fat8_obfuscation, deobfuscate_byte, obfuscate_byte = (
+    ('pc98', deobfuscate_byte_pc98, obfuscate_byte_pc98)
+    if is_pc98_sys else
+    ('pc88', deobfuscate_byte_pc88, obfuscate_byte_pc88)
+)
 fat8_disk_size = found_tracks * fat8_sides * fat8_sectors_per_track * fat8_sector_size
 fat8_est_bytes_per_cluster = (fat8_disk_size + FAT8_MAX_CLUSTERS - 1) // FAT8_MAX_CLUSTERS
 fat8_bytes_per_track = fat8_sectors_per_track * fat8_sector_size
@@ -532,13 +819,82 @@ fat8_bytes_per_cluster = fat8_sectors_per_cluster * fat8_sector_size
 metadata_track = fat8_metadata_cluster // fat8_clusters_per_track // fat8_sides
 metadata_side = fat8_metadata_cluster // fat8_clusters_per_track % fat8_sides
 
+fat8_fmt_name = 'Unknown'
+
+no_obfuscation = lambda i, byt: byt
+
+def guess_fat8_fmt():
+    guessed_fmt_name, guessed_fmt, guessed_fmt_score = None, None, None
+    for fmt_name, fmt in KNOWN_FAT8_FMTS.items():
+        fmt_tracks = fmt['tracks']
+        fmt_sides = fmt['sides']
+        fmt_sectors = fmt['sectors']
+        fmt_sector1_start_hints = fmt['sector1_start_hints']
+        fmt_charset = fmt['charset']
+        fmt_obfuscation = fmt['obfuscation']
+        fmt_metadata_track = fmt['metadata_track']
+        fmt_metadata_side = fmt['metadata_side']
+        fmt_clusters_per_track = fmt['clusters_per_track']
+        assert fmt == dict(
+            tracks=fmt_tracks,
+            sides=fmt_sides,
+            sectors=fmt_sectors,
+            sector1_start_hints=fmt_sector1_start_hints,
+            charset=fmt_charset,
+            obfuscation=fmt_obfuscation,
+            metadata_track=fmt_metadata_track,
+            metadata_side=fmt_metadata_side,
+            clusters_per_track=fmt_clusters_per_track,
+        )
+        if fmt_tracks != found_tracks:
+            continue
+        if fmt_sides != fat8_sides:
+            continue
+        if fmt_sectors != fat8_sectors_per_track:
+            continue
+        fmt_score = sum(1 for hint in fmt_sector1_start_hints if boot_sector is not None and hint(boot_sector))
+        if guessed_fmt is None or fmt_score > guessed_fmt_score:
+            guessed_fmt_name, guessed_fmt, guessed_fmt_score = fmt_name, fmt, fmt_score
+    if guessed_fmt is not None:
+        global fat8_fmt_name
+        fat8_fmt_name = guessed_fmt_name
+        if guessed_fmt['charset'] is not None:
+            global fat8_8bit_charset, decode_8bit_charset, encode_8bit_charset
+            decode_8bit_charset, encode_8bit_charset = {
+                'pc6001-8bit': (decode_pc6001_8bit_charset, encode_pc6001_8bit_charset),
+                'pc98-8bit': (decode_pc98_8bit_charset, encode_pc98_8bit_charset),
+            }[guessed_fmt['charset']]
+            fat8_8bit_charset = guessed_fmt['charset']
+        global fat8_obfuscation, deobfuscate_byte, obfuscate_byte
+        if guessed_fmt['obfuscation'] is not None:
+            deobfuscate_byte, obfuscate_byte = {
+                'pc98': (deobfuscate_byte_pc98, obfuscate_byte_pc98),
+                'pc88': (deobfuscate_byte_pc88, obfuscate_byte_pc88),
+            }[guessed_fmt['obfuscation']]
+        else:
+            deobfuscate_byte, obfuscate_byte = no_obfuscation, no_obfuscation
+        fat8_obfuscation = guessed_fmt['obfuscation']
+        global metadata_track, metadata_side, fat8_clusters_per_track, fat8_metadata_cluster
+        metadata_track = guessed_fmt['metadata_track']
+        metadata_side = guessed_fmt['metadata_side']
+        fat8_clusters_per_track = guessed_fmt['clusters_per_track']
+        fat8_metadata_cluster = (metadata_track * fat8_sides + metadata_side) * fat8_clusters_per_track
+
+guess_fat8_fmt()
+
+fat8_total_clusters = found_tracks * fat8_sides * fat8_clusters_per_track
+fat8_sectors_per_cluster = fat8_sectors_per_track // fat8_clusters_per_track
+fat8_bytes_per_cluster = fat8_sectors_per_cluster * fat8_sector_size
 fat_sector_indices = {fat8_sectors_per_track - 2, fat8_sectors_per_track - 1, fat8_sectors_per_track - 0}
 autorun_sector_index = fat8_sectors_per_track - 3
-dir_sector_indices = set(range(1, autorun_sector_index, 2)) if fat8_sides == 1 else set(range(1, 10))
+dir_sector_indices = set(range(1, autorun_sector_index))
 
 output.append('\n== Diagnostic Information ==')
-output.append(f"Is PC66 SYS!: {is_pc66_sys}")
-output.append(f"Is PC66SR RXR!: {is_pc66sr_rxr}")
+output.append(f"Detected format: {fat8_fmt_name}")
+output.append(f"8-bit character set: {fat8_8bit_charset}")
+output.append(f"BASIC obfuscation method: {fat8_obfuscation}")
+output.append(f"Is PC66 SYS: {is_pc66_sys}")
+output.append(f"Is PC66SR RXR: {is_pc66sr_rxr}")
 output.append(f"Is PC98 boot sector: {is_pc98_sys}")
 output.append(f"D88 track count: {found_tracks}")
 output.append(f"D88 side count: {found_sides}")
@@ -570,9 +926,9 @@ fat_sectors = {}
 autorun_data = None
 
 ATTR_BINARY = 'Binary'
-ATTR_1_RESERVED = 'Reserved#1(Hidden?)'
-ATTR_2_RESERVED = 'Reserved#2(System?)'
-ATTR_3_RESERVED = 'Reserved#3(VolID?)'
+ATTR_1_RESERVED = 'Reserved#1'
+ATTR_2_RESERVED = 'Reserved#2'
+ATTR_3_RESERVED = 'Reserved#3'
 ATTR_READ_ONLY = 'Read-Only'
 ATTR_OBFUSCATED = 'Obfuscated'  # some documentation calls this "encrypted" or "protected"
 ATTR_READ_AFTER_WRITE = 'Read-after-Write'
@@ -598,94 +954,6 @@ ALL_ATTRS = {
     0x100: PSEUDO_ATTR_DELETED,
     0x200: PSEUDO_ATTR_UNUSED,
 }
-
-# NEC PC-88 obfuscated ("encrypted") BASIC saves use a pair of XOR
-# keys which are stored in ROM, using the algorithm previously
-# documented here:
-# https://robhagemans.github.io/pcbasic/doc/2.0/#protected-file-format
-# - but with different key data. One key has length 11, the other has
-# length 13. A byte from each one is XOR'ed with each byte being
-# de-obfuscated/decrypted or obfuscated/encrypted. However, you can
-# de-obfuscate/decrypt (or obfuscate/encrypt) the save data just fine
-# without the ROM data, provided you have a "combined XOR key" which
-# is 11*13 = 143 bytes long. It turns out you can get BASIC to save
-# this key as part of your program, provided you have the right string
-# in your program at the right position. So, I wrote a program to do
-# this and recovered the "combined XOR key" from my save file.
-#
-# Here's the BASIC program I typed in for key recovery:
-# ```basic
-# 10 ' The length of the comment is important. Do not change it! It needs to leave the first byte of KP$ at file offset 143. '''''''
-# 20 KP$="▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂"
-# 30 WIDTH 80:SCREEN,,0:CLS
-# 40 V1$="":FOR J=11 TO 1 STEP -1:FOR I=13 TO 1 STEP -1:V1$=V1$+CHR$(128+I):NEXT I:NEXT J
-# 50 IF KP$<>V1$ THEN PRINT"Program is corrupt. Re-enter:":PRINT"20 KP$="+CHR$(34)+V1$+CHR$(34):STOP
-# 60 PRINT"Saving known plaintext in temporary file TMP."
-# 70 SAVE"TMP"
-# 80 PRINT"Verifying known plaintext in temporary file TMP."
-# 90 OPEN"TMP"FOR INPUT AS #1
-# 100 XP$=INPUT$(143,1) ' Padding
-# 110 VP$=INPUT$(143,1) ' To verify
-# 120 CLOSE #1
-# 130 KILL"TMP"
-# 140 PRINT"Removing temporary file TMP."
-# 150 IF KP$<>VP$ THEN PRINT"KP$<>VP$":PRINT"KP$:";KP$:PRINT"VP$:"VP$:STOP
-# 160 PRINT"Saving ciphertext in temporary file TMP."
-# 170 SAVE"TMP",P
-# 180 PRINT"Reading cyphertext from temporary file TMP."
-# 190 OPEN"TMP"FOR INPUT AS #1
-# 200 CX$=INPUT$(143,1) ' Padding
-# 210 CT$=INPUT$(143,1) ' To verify
-# 220 CLOSE #1
-# 230 KILL"TMP"
-# 240 PRINT"Removing temporary file TMP."
-# 250 CK$="":FOR I=0 TO 142:CK$=CK$+CHR$(((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR 128):NEXT I
-# 260 PRINT"Combined key:":FOR I=1 TO LEN(CK$):PRINT MID$(HEX$(256+ASC(MID$(CK$,I,1))),2);" ";:NEXT I:PRINT
-# 270 DC$="":FOR I=0 TO LEN(CT$)-1:DC$=DC$+CHR$(((((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR ASC(MID$(CK$,1+(I MOD 143),1)))+13-(I MOD 13))MOD 256):NEXT I
-# 280 IF KP$<>DC$ THEN PRINT"KP$<>DC$":PRINT"KP$:";KP$:PRINT"DC$:"DC$:STOP
-# 290 PRINT"Combined key has been verified to decrypt plaintext without ROM data."
-# 300 PRINT"Saving combined key in CK.DAT."
-# 310 OPEN"CK.DAT" FOR OUTPUT AS #1
-# 320 PRINT #1,CK$;
-# 330 CLOSE #1
-# 340 PRINT"Done."
-# 350 END
-# ```
-
-# Here's the combined key material from CK.DAT:
-PC88_COMBINED_KEY = (
-    0xC0, 0xCF, 0xCC, 0x85, 0x62, 0x81, 0x0C, 0x42, 0xC3, 0x04, 0xE5,
-    0xE6, 0xCD, 0x11, 0x75, 0xB6, 0x90, 0xE4, 0x97, 0x35, 0xED, 0xB2,
-    0xFC, 0x6E, 0x37, 0x77, 0x6B, 0x60, 0x30, 0x86, 0xDD, 0x38, 0x44,
-    0x15, 0x39, 0x2D, 0xD4, 0x4D, 0x62, 0xED, 0x76, 0x09, 0x29, 0xAC,
-    0xC0, 0xCF, 0xC4, 0x83, 0x57, 0xC1, 0xCB, 0x74, 0xD4, 0xD9, 0x78,
-    0xD1, 0x27, 0x11, 0x75, 0xBE, 0x96, 0xD1, 0xD7, 0xF2, 0xDB, 0xA5,
-    0x21, 0xF3, 0x00, 0x9D, 0x6B, 0x60, 0x38, 0x80, 0xE8, 0x78, 0x83,
-    0x23, 0x2E, 0xF0, 0x49, 0x7A, 0x88, 0xED, 0x76, 0x01, 0x2F, 0x99,
-    0x80, 0x08, 0xF2, 0x94, 0x8A, 0x5C, 0xFC, 0x9E, 0xD4, 0xD9, 0x70,
-    0xD7, 0x12, 0x51, 0xB2, 0x88, 0x81, 0x0C, 0x4A, 0xC5, 0x31, 0xA5,
-    0x21, 0xFB, 0x06, 0xA8, 0x2B, 0xA7, 0x0E, 0x97, 0x35, 0xE5, 0xB4,
-    0xC9, 0x2E, 0xF0, 0x41, 0x7C, 0xBD, 0xAD, 0xB1, 0x37, 0x38, 0x44,
-    0x1D, 0x3F, 0x18, 0x94, 0x8A, 0x54, 0xFA, 0xAB, 0x94, 0x1E, 0x46,
-)
-
-def deobfuscate_byte(i, byt):
-    if is_pc98_sys:
-        # N88-BASIC(86) uses a simple bit-rotation
-        return ((byt & 0x7F) << 1) | ((byt & 0x80) >> 7)
-    # PC88 BASIC uses the same algorithm as
-    # https://robhagemans.github.io/pcbasic/doc/2.0/#protected-file-format
-    # but different key material.
-    return (range(13, 0, -1)[i%13] + (((byt + 0x100 - range(11, 0, -1)[i%11]) % 0x100) ^ PC88_COMBINED_KEY[i%(11*13)])) % 0x100
-
-def obfuscate_byte(i, byt):
-    if is_pc98_sys:
-        # N88-BASIC(86) uses a simple bit-rotation
-        return ((byt & 0x8E) >> 1) | ((byt & 0x01) << 7)
-    # PC88 BASIC uses the same algorithm as
-    # https://robhagemans.github.io/pcbasic/doc/2.0/#protected-file-format
-    # but different key material.
-    return (range(11, 0, -1)[i%13] + (((byt + 0x100 - range(13, 0, -1)[i%13]) % 0x100) ^ PC88_COMBINED_KEY[i%(11*13)])) % 0x100
 
 # these restrictions on generated filenames are somewhat conservative
 # and meant to accomodate MS-DOS, UNIX, macOS, and Windows - however
@@ -751,11 +1019,12 @@ def extend_name(base_filename, name_tail):
 raw_metadata_sectors = {}
 used_filenames = {}
 used_lower_fs_names = set()
-for sec_num, offset, data, sectors_in_track in metadata_sectors:
+end_of_directory = False
+for sec_num, offset, data, sectors_in_track in sorted(metadata_sectors):
     for vsec_num in range(((sec_num - 1) << fat8_sector_shift) + 1, (sec_num << fat8_sector_shift) + 1):
       vdata = data[fat8_sector_size * ((vsec_num - 1) % (1 << fat8_sector_shift)):fat8_sector_size * (1 + ((vsec_num - 1) % (1 << fat8_sector_shift)))]
       raw_metadata_sectors[vsec_num] = vdata
-      if vsec_num in dir_sector_indices:
+      if vsec_num in dir_sector_indices and not end_of_directory:
         for i in range(0, 256, 16):
             entry = vdata[i:i+16]
             raw_name = entry[0:6]
@@ -776,14 +1045,12 @@ for sec_num, offset, data, sectors_in_track in metadata_sectors:
             while extend_name(host_fs_deobf_name.lower(), disambig_deobf) in used_lower_fs_names:
                 disambig_deobf = f" ({1 + int(disambig.strip(' ()') or 0)})"
             host_fs_deobf_name = extend_name(host_fs_deobf_name, disambig_deobf)
-            if entry == 16 * b'\xFF' and PSEUDO_ATTR_UNUSED in fattrs:
-                # completely unused entries fresh from the formatter
-                # do not need to be printed at all; other-shaped
-                # unused ones will still be printed in case they
-                # contain useful residual information
-                continue
+            if PSEUDO_ATTR_UNUSED in fattrs:
+                # directory listing terminates at the first unused entry
+                end_of_directory = True
+                break
             used_lower_fs_names |= {host_fs_name.lower()}
-            if ATTR_OBFUSCATED in fattrs:
+            if ATTR_OBFUSCATED in fattrs and fat8_obfuscation is not None:
                 used_lower_fs_names |= {host_fs_deobf_name.lower()}
             parsed_entry = dict(idx=(vsec_num - 1) * 16 + i // 16 + 1, host_fs_name=host_fs_name, host_fs_deobf_name=host_fs_deobf_name, fattrs=fattrs, cluster=cluster, name=name, ext=ext, chain=[], errors=set(), allocated_size=0, raw_entry=entry, file_data=None)
             if PSEUDO_ATTR_DELETED not in fattrs:
@@ -820,8 +1087,8 @@ def hexdump_entry_data(file_data, fattrs):
             if j % 8 == 7:
                 row += ' '
                 drow += ' '
-        output.append(f"{row} {vrow}{vtail}" + (f"{drow} {dvrow}{dvtail}" if ATTR_OBFUSCATED in fattrs else ''))
-    output.append(f"{len(file_data):06X}{'':53}╰{'─' * ((len(file_data) % 16) or 16)}╯{'' if ATTR_OBFUSCATED not in fattrs else ' ' * ((16 - ((len(file_data) % 16) or 16)) + 52) + '╰' + '─' * ((len(file_data) % 16) or 16) + '╯'}")
+        output.append(f"{row} {vrow}{vtail}" + (f"{drow} {dvrow}{dvtail}" if ATTR_OBFUSCATED in fattrs and fat8_obfuscation is not None else ''))
+    output.append(f"{len(file_data):06X}{'':53}╰{'─' * ((len(file_data) % 16) or 16)}╯{'' if ATTR_OBFUSCATED not in fattrs or fat8_obfuscation is None else ' ' * ((16 - ((len(file_data) % 16) or 16)) + 52) + '╰' + '─' * ((len(file_data) % 16) or 16) + '╯'}")
 
 if boot_sector is not None:
     output.append(f"\n== Boot Sector (Track 0, Sector 1) =={'':22}╭{'─' * 16}╮")
@@ -837,9 +1104,13 @@ for vsec_num in sorted(dir_sector_indices):
         output.append(f"Missing directory sector {vsec_num}")
           
 if autorun_data is not None:
-    output.append(f"\n== Autorun/ID Sector {autorun_sector_index:3} =={'':31}╭{'─' * 16}╮")
+    output.append(f"\n== Autorun/ID Sector {autorun_sector_index:3} =={'':32}╭{'─' * 16}╮")
     hexdump_entry_data(autorun_data, set())
-    output.append(f"Header: {autorun_data[0]:02X} {autorun_data[1]:02X}")
+    # TODO: decode these!
+    # Header byte index 0: flags (0x10 = disk is write protected, 0x40 = read-after-write)
+    # Header byte index 1: answer for "How many files (0-15) ?" boot-time question
+    output.append(f"Disk attributes: {', '.join([ATTR_READ_ONLY if (1 << i) == 0x10 else ATTR_READ_AFTER_WRITE if (1 << 1) == 0x40 else 'UnknownAttr:0x%02X' % (1 << i) for i in range(8) if autorun_data[0] & (1 << i)] or ['None'])}")
+    output.append(f"Number of files (0-15) ? {autorun_data[1] if autorun_data[1] != 0xFF else '(ask user)'}")
     output.append(f"Payload: {decode_8bit_charset(autorun_data[2:].rstrip(bytes([0x00])).rstrip(b' '))}")
 
 first_fat_sector_idx = sorted(fat_sectors.keys())[0] if fat_sectors else None
@@ -883,13 +1154,13 @@ for entry in directory_entries:
         chain = [entry['cluster']]
         if entry['cluster'] < FAT8_RESERVED_CLUSTERS:
             errors |= {'Reserved cluster at head of chain'}
-        elif entry['cluster'] >= FAT8_FINAL_CLUSTER_OFFSET and entry['cluster'] not in (FAT8_CHAIN_TERMINAL_LINK, FAT8_UNALLOCATED_CLUSTER):
+        elif entry['cluster'] > FAT8_FINAL_CLUSTER_OFFSET and entry['cluster'] not in (FAT8_CHAIN_TERMINAL_LINK, FAT8_UNALLOCATED_CLUSTER):
             errors |= {'Head of chain cannot be a block count'}
-        elif entry['cluster'] < FAT8_FINAL_CLUSTER_OFFSET and entry['cluster'] >= fat8_total_clusters:
+        elif entry['cluster'] <= FAT8_FINAL_CLUSTER_OFFSET and entry['cluster'] >= fat8_total_clusters:
             errors |= {'Head of chain falls outside of disk'}
-        while chain[-1] < FAT8_FINAL_CLUSTER_OFFSET and not errors:
+        while chain[-1] <= FAT8_FINAL_CLUSTER_OFFSET and not errors:
             next_link = fat1[chain[-1]]
-            if next_link < FAT8_FINAL_CLUSTER_OFFSET:
+            if next_link <= FAT8_FINAL_CLUSTER_OFFSET:
                 if next_link < FAT8_RESERVED_CLUSTERS:
                     errors |= {'Reserved cluster in chain'}
                 elif next_link >= fat8_total_clusters:
@@ -899,7 +1170,7 @@ for entry in directory_entries:
             chain += [next_link]
         if (FAT8_UNALLOCATED_CLUSTER in chain) and not errors:
             errors |= {'Unallocated cluster in FAT chain'}
-        if (chain[-1] < FAT8_FINAL_CLUSTER_OFFSET or chain[-1] == FAT8_UNALLOCATED_CLUSTER) and not errors:
+        if (chain[-1] <= FAT8_FINAL_CLUSTER_OFFSET or chain[-1] == FAT8_UNALLOCATED_CLUSTER) and not errors:
             errors |= {'Unterminated FAT chain'}
     if not errors:
       for link in chain[:-1]:
@@ -912,7 +1183,7 @@ for entry in directory_entries:
             chained_blocks[link] = entry
     if not errors:
         allocated_size = fat8_bytes_per_cluster * len(chain[:-1])
-        if chain[-1] >= FAT8_FINAL_CLUSTER_OFFSET and chain[-1] not in (FAT8_CHAIN_TERMINAL_LINK, FAT8_UNALLOCATED_CLUSTER):
+        if chain[-1] > FAT8_FINAL_CLUSTER_OFFSET and chain[-1] not in (FAT8_CHAIN_TERMINAL_LINK, FAT8_UNALLOCATED_CLUSTER):
             allocated_size -= fat8_bytes_per_cluster
             allocated_size += fat8_sector_size * (chain[-1] - FAT8_FINAL_CLUSTER_OFFSET)
         entry['allocated_size'] = allocated_size
@@ -927,17 +1198,23 @@ for idx, entry in sorted((ent['idx'], ent) for ent in directory_entries):
         file_data = b''
         final_cluster_offset = 0
         for i, cluster in enumerate(chain[:-1]):
+            if file_data is None:
+                # due to a previous error
+                break
             in_final_cluster = i == len(chain) - 2
             max_fat8_sectors_in_cluster = fat8_sectors_per_cluster
             if in_final_cluster:
                 final_cluster_offset = len(file_data)
-                if chain[-1] >= FAT8_FINAL_CLUSTER_OFFSET and chain[-1] < FAT8_CHAIN_TERMINAL_LINK:
+                if chain[-1] > FAT8_FINAL_CLUSTER_OFFSET and chain[-1] < FAT8_CHAIN_TERMINAL_LINK:
                     max_fat8_sectors_in_cluster = chain[-1] - FAT8_FINAL_CLUSTER_OFFSET
             cluster_track = cluster // fat8_clusters_per_track // fat8_sides
             cluster_side = cluster // fat8_clusters_per_track % fat8_sides
             cluster_sectors = track_sector_map.get((cluster_track, cluster_side), [])
             for cluster_sec_num in range(1 + (cluster % fat8_clusters_per_track) * (fat8_sectors_per_track // fat8_clusters_per_track), 1 + (cluster % fat8_clusters_per_track) * (fat8_sectors_per_track // fat8_clusters_per_track) + max_fat8_sectors_in_cluster):
                 cluster_sector_data = None
+                if file_data is None:
+                    # due to a previous error
+                    break
                 for sec_num, actual_data_offset, sector_data, sectors_in_track in cluster_sectors:
                   for vsec_num in range(((sec_num - 1) << fat8_sector_shift) + 1, (sec_num << fat8_sector_shift) + 1):
                     if vsec_num == cluster_sec_num:
@@ -947,7 +1224,7 @@ for idx, entry in sorted((ent['idx'], ent) for ent in directory_entries):
                   if cluster_sector_data is not None:
                       break
                 if cluster_sector_data is None:
-                    entry['errors'] |= {'Missing sector'}
+                    entry['errors'] |= {f"Missing track {cluster_track}, side {cluster_side}, sector {cluster_sec_num} in cluster {cluster:02X}"}
                     file_data = None
                     break
                 file_data += cluster_sector_data
@@ -966,7 +1243,7 @@ output.append("\n== Directory Entries ==")
 
 for idx, entry in sorted((ent['idx'], ent) for ent in directory_entries):
     sep = '*' if ATTR_BINARY in entry['fattrs'] else '.' if ATTR_NON_ASCII in entry['fattrs'] else ' '
-    output.append(f"{entry['idx']:3}. {'[' if unlisted else ' '}{entry['name']}{sep}{entry['ext']}{']' if unlisted else ' '} {(entry['allocated_size'] + fat8_bytes_per_cluster - 1) // fat8_bytes_per_cluster:3d} {quote_filename(entry['host_fs_name'])+('' if ATTR_OBFUSCATED not in entry['fattrs'] else ', ' + quote_filename(entry['host_fs_deobf_name'])):40} {len(entry['file_data'] or b''):8} ATTRS={entry['fattrs'] or None}  START={entry['cluster']:02X} CHAIN={'→'.join(f'{cluster:02X}' for cluster in entry['chain']) if entry['chain'] else None} STATUS={entry['errors'] or 'OK'}")
+    output.append(f"{entry['idx']:3}. {'[' if unlisted else ' '}{entry['name']}{sep}{entry['ext']}{']' if unlisted else ' '} {(entry['allocated_size'] + fat8_bytes_per_cluster - 1) // fat8_bytes_per_cluster:3d} {quote_filename(entry['host_fs_name'])+('' if ATTR_OBFUSCATED not in entry['fattrs'] or fat8_obfuscation is None else ', ' + quote_filename(entry['host_fs_deobf_name'])):40} {len(entry['file_data'] or b''):8} ATTRS={entry['fattrs'] or None}  START={entry['cluster']:02X} CHAIN={'→'.join(f'{cluster:02X}' for cluster in entry['chain']) if entry['chain'] else None} STATUS={entry['errors'] or 'OK'}")
 
 output.append(f"\n== File Contents ==")
 
@@ -974,7 +1251,7 @@ for idx, entry in sorted((ent['idx'], ent) for ent in directory_entries):
     errors = entry['errors']
     if not errors:
         sep = '*' if ATTR_BINARY in entry['fattrs'] else '.' if ATTR_NON_ASCII in entry['fattrs'] else ' '
-        output.append(f"{entry['idx']:3}. {'[' if unlisted else ' '}{entry['name']}{sep}{entry['ext']}{']' if unlisted else ' '} {(entry['allocated_size'] + fat8_bytes_per_cluster - 1) // fat8_bytes_per_cluster:3d} {quote_filename(entry['host_fs_name']):27} {len(entry['file_data'] or b''):8} ╭{'─' * 16}╮" + ('' if ATTR_OBFUSCATED not in entry['fattrs'] else f" {quote_filename(entry['host_fs_deobf_name']):50} ╭{'─' * 16}╮"))
+        output.append(f"{entry['idx']:3}. {'[' if unlisted else ' '}{entry['name']}{sep}{entry['ext']}{']' if unlisted else ' '} {(entry['allocated_size'] + fat8_bytes_per_cluster - 1) // fat8_bytes_per_cluster:3d} {quote_filename(entry['host_fs_name']):27} {len(entry['file_data'] or b''):8} ╭{'─' * 16}╮" + ('' if ATTR_OBFUSCATED not in entry['fattrs'] or fat8_obfuscation is None else f" {quote_filename(entry['host_fs_deobf_name']):50} ╭{'─' * 16}╮"))
         if file_data is not None:
             hexdump_entry_data(entry['file_data'], entry['fattrs'])
 
@@ -998,7 +1275,7 @@ with open(log_filename, "w", encoding="utf-8") as f:
 
 def utf8_dump_filename(filename):
     parts = filename.rsplit('.', 1)
-    return '_'.join(parts) + '_utf8.txt'
+    return '_'.join(parts) + '_utf8_dump.txt'
 
 if boot_sector is not None:
     boot_sector_filename = os.path.join(outdir, "_boot_sector.dat")
@@ -1050,7 +1327,7 @@ for idx, entry in sorted((ent['idx'], ent) for ent in directory_entries):
         with open(utf8_dump_filename(entry_filename), "w", encoding="utf-8") as f:
             print(f"writing {utf8_dump_filename(entry_filename)}")
             f.write(decode_8bit_charset(file_data))
-        if ATTR_OBFUSCATED in entry['fattrs']:
+        if ATTR_OBFUSCATED in entry['fattrs'] and fat8_obfuscation is not None:
             file_deobf_data = bytes([deobfuscate_byte(i, byt) for i, byt in enumerate(file_data)])
             entry_deobf_filename = os.path.join(outdir, entry['host_fs_deobf_name'])
             with open(entry_deobf_filename, "wb") as f:
