@@ -8,6 +8,8 @@ python3 fat_d88_tool.py PATH/TO/MY/DISK.D88
 ```
 ... if all goes well, this will output somevery verbose log messages and then create a sub-directory of the current working directory named `DISK [FAT8 Contents]` or similar (possibly with a parenthesized numeric suffix to avoid other ones) with some files inside it. If you are especially fortunate, some of those files may contain the data you were hoping to recover.
 
+A single D88 file may contain multiple images concatenated. You may also pass in multiple D88 files if you wish.
+
 # Why?
 Why am I sharing it here when the code is terrible? In case you want to use it on a disk other tools won't touch.
 
@@ -15,9 +17,9 @@ Why am I sharing it here when the code is terrible? In case you want to use it o
 After a lot of banging my head against the wall and AI's, and eventually rewriting most of the logic after discovering the AI-written code was almost universally wrong, I now have a Python script _(which is uglier than sin and still needs a bunch of cleanup, it started in chatgpt and I have yet to make it not terrible code-wise)_ that can decode FAT8-formatted D88 disk images and dump the files from them into a directory. It doesn't seem to croak or corrupt the extracted files the way other tools do.
 
 # Status
-**Working:** D88 FAT8 extraction. Tested with a handful of disk images from PC66, PC66SR, PC88 and PC98. For PC98 and PC88 at least it knows how to deobfuscate "protected" saves too. Implements the 8-bit/single-byte Japanese character sets for PC88/PC98 and PC-6001 series. A Pasopia disk works by pretending it is a PC88 disk.
+**Working:** D88 FAT8 extraction. Tested with a handful of disk images from PC66, PC66SR, PC88, and PC98. For PC98 and PC88 at least it knows how to deobfuscate "protected" saves too. Implements the 8-bit/single-byte Japanese character sets for PC88/PC98 and PC-6001 series by mapping them clumsily to Unicode when putting them in filenames or log/dump files. A Pasopia disk image worked too.
 
-**Still TODO:** a lot of stuff, including cleaning up the code, adding support for multi-disk D88 files, adding support for other charsets, decoding tokenized BASIC into ASCII, detecting PC-6001 series autostart in the boot sector, and probably a whole lot more...
+**Still TODO:** a lot of stuff, including cleaning up the code, adding support for other charsets, decoding tokenized BASIC into ASCII, detecting PC-6001 series autostart in the boot sector, and probably a whole lot more...
 
 # System detection
 The FAT8 used on these various NEC PC's seems to have varied a bit in terms of where the metadata track (containing directory, autostart/ID information, and triplicate FAT) is stored, and also in terms of how it is laid out. At the moment the disk parameters (especially the number of sides) and information about the sectors in tracks 0 and 1 (especially the size of the first sector in track 0 along with its contents) are used to attempt to determine which flavor is used. This also determines which character set will be used when constructing filenames or displaying hexadecimal dumps or other debug information.
