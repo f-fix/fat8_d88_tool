@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
+from typing import Callable, NamedTuple, List, Dict, Tuple, Optional, Set
 
 import codecs
 import os.path
@@ -9,9 +10,27 @@ import unicodedata
 
 # FAT8 formatting schemes
 
-KNOWN_FAT8_FMTS = {
-    'PC-9800 3.5" 2DD/5.25" 2DD': dict(
-        # from PC-9801UV21 BASIC User's Manual
+
+class KnownFAT8Format(NamedTuple):
+    name: str
+    src: str
+    tracks: int  # used for matching
+    sides: int  # used for matching
+    sectors: int  # used for matching
+    fat_tracks: int
+    sector1_start_hints: List[Callable[[bytes], bool]]
+    charset: str
+    obfuscation: str
+    metadata_track: int
+    metadata_side: int
+    clusters_per_track: int
+    side_is_cluster_lsb: bool
+
+
+KNOWN_FAT8_FORMATS = (
+    KnownFAT8Format(
+        name='PC-9800 3.5" 2DD/5.25" 2DD',
+        src="from PC-9801UV21 BASIC User's Manual",
         tracks=80,
         fat_tracks=80,
         sides=2,
@@ -24,8 +43,9 @@ KNOWN_FAT8_FMTS = {
         clusters_per_track=1,
         side_is_cluster_lsb=False,
     ),
-    'PC-9800 8" 2D/3.5" 2HD/5.25" 2HD': dict(
-        # from PC-9801UV21 BASIC User's Manual
+    KnownFAT8Format(
+        name='PC-9800 8" 2D/3.5" 2HD/5.25" 2HD',
+        src="from PC-9801UV21 BASIC User's Manual",
         tracks=77,
         fat_tracks=77,
         sides=2,
@@ -40,8 +60,9 @@ KNOWN_FAT8_FMTS = {
         clusters_per_track=1,
         side_is_cluster_lsb=False,
     ),
-    'PC-9800 8" 2D/3.5" 2HD/5.25" 2HD (wild type, 78 tracks)': dict(
-        # seen in the wild
+    KnownFAT8Format(
+        name='PC-9800 8" 2D/3.5" 2HD/5.25" 2HD (wild type, 78 tracks)',
+        src="seen in the wild",
         tracks=78,
         fat_tracks=77,
         sides=2,
@@ -56,10 +77,11 @@ KNOWN_FAT8_FMTS = {
         clusters_per_track=1,
         side_is_cluster_lsb=False,
     ),
-    'PC-8000/PC-8800 5.25" 1D': dict(
-        # from PC-8801 mkII BASIC User's Manual
-        #      PC-8001 mkII SR N80SR-BASIC Reference Manual
-        #      PC-8001 N-BASIC Programming Textbook
+    KnownFAT8Format(
+        name='PC-8000/PC-8800 5.25" 1D',
+        src="from PC-8801 mkII BASIC User's Manual, "
+        "PC-8001 mkII SR N80SR-BASIC Reference Manual, "
+        "PC-8001 N-BASIC Programming Textbook",
         tracks=35,
         fat_tracks=35,
         sides=1,
@@ -72,10 +94,11 @@ KNOWN_FAT8_FMTS = {
         clusters_per_track=2,
         side_is_cluster_lsb=False,
     ),
-    'PC-8000/PC-8800 5.25" 2D': dict(
-        # from PC-8801 mkII MR N88-BASIC / N88-Japanese BASIC Guide Book
-        #      PC-8801 mkII BASIC User's Manual
-        #      PC-8001 mkII SR N80SR-BASIC Reference Manual
+    KnownFAT8Format(
+        name='PC-8000/PC-8800 5.25" 2D',
+        src="from PC-8801 mkII MR N88-BASIC / N88-Japanese BASIC Guide Book, "
+        "PC-8801 mkII BASIC User's Manual, "
+        "PC-8001 mkII SR N80SR-BASIC Reference Manual",
         tracks=40,
         fat_tracks=40,
         sides=2,
@@ -88,10 +111,11 @@ KNOWN_FAT8_FMTS = {
         clusters_per_track=2,
         side_is_cluster_lsb=False,
     ),
-    'PC-8801 mkII 8" 2D/5.25" 2HD': dict(
-        # from PC-8801 mkII MR N88-BASIC / N88-Japanese BASIC Guide Book
-        #      PC-8801 mkII BASIC User's Manual
-        #      PC-8001 mkII SR N80SR-BASIC Reference Manual
+    KnownFAT8Format(
+        name='PC-8801 mkII 8" 2D/5.25" 2HD',
+        src="from PC-8801 mkII MR N88-BASIC / N88-Japanese BASIC Guide Book, "
+        "PC-8801 mkII BASIC User's Manual, "
+        "PC-8001 mkII SR N80SR-BASIC Reference Manual",
         tracks=77,
         fat_tracks=77,
         sides=2,
@@ -106,8 +130,9 @@ KNOWN_FAT8_FMTS = {
         clusters_per_track=1,
         side_is_cluster_lsb=False,
     ),
-    'PC-6001 mkII 5.25" 1D': dict(
-        # from PC 6001mk II User Manual
+    KnownFAT8Format(
+        name='PC-6001 mkII 5.25" 1D',
+        src="from PC 6001mk II User Manual",
         tracks=35,
         fat_tracks=35,
         sides=1,
@@ -122,8 +147,9 @@ KNOWN_FAT8_FMTS = {
         clusters_per_track=2,
         side_is_cluster_lsb=False,
     ),
-    'PC-6001 mkII 5.25" 1D (wild type, 36 tracks)': dict(
-        # seen in the wild
+    KnownFAT8Format(
+        name='PC-6001 mkII 5.25" 1D (wild type, 36 tracks)',
+        src="seen in the wild",
         tracks=36,
         fat_tracks=35,
         sides=1,
@@ -138,8 +164,9 @@ KNOWN_FAT8_FMTS = {
         clusters_per_track=2,
         side_is_cluster_lsb=False,
     ),
-    'PC-6601 3.5" 1D (wild type)': dict(
-        # seen in the wild
+    KnownFAT8Format(
+        name='PC-6601 3.5" 1D (wild type)',
+        src="seen in the wild",
         tracks=40,
         fat_tracks=40,
         sides=1,
@@ -154,8 +181,9 @@ KNOWN_FAT8_FMTS = {
         clusters_per_track=2,
         side_is_cluster_lsb=False,
     ),
-    'PC-6601 SR 3.5" 1DD (wild type)': dict(
-        # seen in the wild
+    KnownFAT8Format(
+        name='PC-6601 SR 3.5" 1DD (wild type)',
+        src="seen in the wild",
         tracks=80,
         fat_tracks=80,
         sides=1,
@@ -171,8 +199,9 @@ KNOWN_FAT8_FMTS = {
         clusters_per_track=2,
         side_is_cluster_lsb=False,
     ),
-    'PC-6601 SR 3.5" 1DD (wild type, 81 tracks)': dict(
-        # seen in the wild
+    KnownFAT8Format(
+        name='PC-6601 SR 3.5" 1DD (wild type, 81 tracks)',
+        src="seen in the wild",
         tracks=81,
         fat_tracks=80,
         sides=1,
@@ -188,8 +217,9 @@ KNOWN_FAT8_FMTS = {
         clusters_per_track=2,
         side_is_cluster_lsb=False,
     ),
-    'Pasopia 5.25" 2D (wild type)': dict(
-        # seen in the wild
+    KnownFAT8Format(
+        name='Pasopia 5.25" 2D (wild type)',
+        src="seen in the wild",
         tracks=40,
         fat_tracks=40,
         sides=2,
@@ -204,7 +234,7 @@ KNOWN_FAT8_FMTS = {
         clusters_per_track=2,
         side_is_cluster_lsb=True,
     ),
-}
+)
 
 # 8-bit/single-byte character encoding schemes
 
@@ -929,9 +959,17 @@ SECTOR_HEADER_SIZE = 16
 DISK_ATTR_WRITE_PROTECTED = "DiskWriteProtected"
 
 
-def analyze_disk(d88_data, disk_idx):
+class DiskInfo(NamedTuple):
+    disk_name_or_comment: Optional[bytes]
+    disk_attrs: Set[str]
+    disk_sz: int
+    track_offsets: List[int]
+    disk_suffix: str
+
+
+def analyze_disk(d88_data: bytes, disk_idx: int):
     disk_name_or_comment = d88_data[:0x10].rstrip(b"\0") or None
-    disk_attrs = DISK_ATTR_WRITE_PROTECTED if d88_data[0x1A] & 0x10 else None
+    disk_attrs = {DISK_ATTR_WRITE_PROTECTED} if d88_data[0x1A] & 0x10 else set()
     disk_sz = int.from_bytes(d88_data[0x1C:0x20], "little")
     assert disk_sz <= len(
         d88_data
@@ -967,7 +1005,7 @@ def analyze_disk(d88_data, disk_idx):
                 offset + SECTOR_HEADER_SIZE < disk_sz
             ), f"Is this a D88 file? Track data spills over past the end"
         i += 1
-    return dict(
+    return DiskInfo(
         disk_name_or_comment=disk_name_or_comment,
         disk_attrs=disk_attrs,
         disk_sz=disk_sz,
@@ -983,24 +1021,47 @@ def start_log():
     return output
 
 
-def log_disk_information(disk_info, output):
-    output.append(f"\n== Disk Information{disk_info['disk_suffix']} ==")
-    output.append(f"Disk name/comment: {disk_info['disk_name_or_comment']}")
-    output.append(f"Disk attributes: {disk_info['disk_attrs']}")
-    output.append(f"Disk size: {disk_info['disk_sz']}")
+def log_disk_information(disk_info: DiskInfo, output):
+    output.append(f"\n== Disk Information{disk_info.disk_suffix} ==")
+    output.append(f"Disk name/comment: {disk_info.disk_name_or_comment}")
+    output.append(f"Disk attributes: {', '.join(sorted(disk_info.disk_attrs)) or None}")
+    output.append(f"Disk size: {disk_info.disk_sz}")
 
 
-def analyze_tracks_and_sectors(d88_data, disk_info, output):
+class TrackAndSide(NamedTuple):
+    track: int
+    side: int
+
+
+class SectorInfo(NamedTuple):
+    sec_num: int
+    actual_data_offset: int
+    sector_data: bytes
+    sectors_in_track: int
+
+
+class TrackAndSectorInfo(NamedTuple):
+    track_sector_map: Dict[TrackAndSide, List[SectorInfo]]
+    nominal_sectors_in_track: Dict[TrackAndSide, int]
+    found_tracks: int
+    found_sides: int
+    found_total_sectors: int
+    found_sectors: int
+    found_disk_size: int
+    largest_sector_size: int
+
+
+def analyze_tracks_and_sectors(d88_data: bytes, disk_info: DiskInfo, output):
     output.append("\n== Track/Sector Table ==")
-    track_sector_map = {}
+    track_sector_map: Dict[TrackAndSide, List[SectorInfo]] = {}
 
     all_sector_ranges = []
-    nominal_sectors_in_track = {}
-    for track_offset in disk_info["track_offsets"]:
-        sectors = []
+    nominal_sectors_in_track: Dict[TrackAndSide, int] = {}
+    for track_offset in disk_info.track_offsets:
+        sectors: List[SectorInfo] = []
         cursor = track_offset
         track_num, side_num = None, None
-        while cursor + SECTOR_HEADER_SIZE <= disk_info["disk_sz"]:
+        while cursor + SECTOR_HEADER_SIZE <= disk_info.disk_sz:
             header = d88_data[cursor : cursor + SECTOR_HEADER_SIZE]
             trk = header[0]
             if track_num is None:
@@ -1026,37 +1087,40 @@ def analyze_tracks_and_sectors(d88_data, disk_info, output):
             else:
                 sector_data_size = nominal_data_size
             assert (
-                actual_data_offset + sector_data_size <= disk_info["disk_sz"]
+                actual_data_offset + sector_data_size <= disk_info.disk_sz
             ), "Is this a D88 file? Sector data spilled off the end"
             for other_sector in sectors:
                 assert (
-                    other_sector[0] != sec_num
+                    other_sector.sec_num != sec_num
                 ), f"Is this a D88 file? Track {trk:3}, Side {side}, Sector {sec_num:2} appears more than once"
             sectors.append(
-                (
-                    sec_num,
-                    actual_data_offset,
-                    d88_data[
+                SectorInfo(
+                    sec_num=sec_num,
+                    actual_data_offset=actual_data_offset,
+                    sector_data=d88_data[
                         actual_data_offset : actual_data_offset + sector_data_size
                     ],
-                    sectors_in_track,
+                    sectors_in_track=sectors_in_track,
                 )
             )
-            nominal_sectors_in_track[(trk, side)] = nominal_sectors_in_track.get(
-                (trk, side), sectors_in_track
+            nominal_sectors_in_track[TrackAndSide(track=trk, side=side)] = (
+                nominal_sectors_in_track.get(
+                    TrackAndSide(track=trk, side=side), sectors_in_track
+                )
             )
             assert (
-                nominal_sectors_in_track[(trk, side)] == sectors_in_track
-            ), f"Is this a damaged disk? Sectors-per-track varies in Track {trk:3}, Side {side}: {nominal_sectors_in_track[(trk, side)]} vs {sectors_in_track}"
+                nominal_sectors_in_track[TrackAndSide(track=trk, side=side)]
+                == sectors_in_track
+            ), f"Is this a damaged disk? Sectors-per-track varies in Track {trk:3}, Side {side}: {nominal_sectors_in_track[TrackAndSide(track=trk, side=side)]} vs {sectors_in_track}"
             all_sector_ranges.append(
                 [actual_data_offset, actual_data_offset + sector_data_size]
             )
             cursor += SECTOR_HEADER_SIZE + sector_data_size
-        key = (track_num, side_num)
+        key = TrackAndSide(track=track_num, side=side_num)
         track_sector_map[key] = sectors
         output.append(
             f"Track {track_num:3}, Side {side_num}: "
-            + ", ".join(f"{s[0]:2}:{len(s[2])}" for s in sectors)
+            + ", ".join(f"{s.sec_num:2}:{len(s.sector_data)}" for s in sectors)
         )
 
     overlap_check_offset = 0
@@ -1073,16 +1137,16 @@ def analyze_tracks_and_sectors(d88_data, disk_info, output):
     found_disk_size = 0
     largest_sector_size = 0
 
-    for (track_num, side_num), sectors in track_sector_map.items():
-        found_tracks = max(found_tracks, 1 + track_num)
-        found_sides = max(found_sides, 1 + side_num)
-        for sec_num, actual_data_offset, sector_data, sectors_in_track in sectors:
+    for track_and_side, sectors in track_sector_map.items():
+        found_tracks = max(found_tracks, 1 + track_and_side.track)
+        found_sides = max(found_sides, 1 + track_and_side.side)
+        for sector_info in sectors:
             found_total_sectors += 1
-            found_disk_size += len(sector_data)
-            largest_sector_size = max(largest_sector_size, len(sector_data))
-            found_sectors = max(found_sectors, sec_num)
+            found_disk_size += len(sector_info.sector_data)
+            largest_sector_size = max(largest_sector_size, len(sector_info.sector_data))
+            found_sectors = max(found_sectors, sector_info.sec_num)
 
-    return dict(
+    return TrackAndSectorInfo(
         track_sector_map=track_sector_map,
         nominal_sectors_in_track=nominal_sectors_in_track,
         found_tracks=found_tracks,
@@ -1106,21 +1170,14 @@ FAT8_FIRST_METADATA_CLUSTER_PC66 = 0x24
 FAT8_FIRST_METADATA_CLUSTER_PC66SR = 0x4A
 
 
-def guess_fat8_fmt_heuristics(track_and_sector_info):
+def guess_fat8_format_heuristics(track_and_sector_info: TrackAndSectorInfo):
     boot_sector = (
         [
-            sector_data
-            for sec_num, actual_data_offset, sector_data, sectors_in_track in sum(
-                [
-                    sectors
-                    for (trk, side), sectors in track_and_sector_info[
-                        "track_sector_map"
-                    ].items()
-                    if trk == 0 and side == 0
-                ],
-                [],
+            sector_info.sector_data
+            for sector_info in track_and_sector_info.track_sector_map.get(
+                TrackAndSide(track=0, side=0), []
             )
-            if sec_num == 1
+            if sector_info.sec_num == 1
         ][:1]
         or [None]
     )[0]
@@ -1134,23 +1191,18 @@ def guess_fat8_fmt_heuristics(track_and_sector_info):
     )
     fat8_sectors_per_track = max(
         sectors
-        for (trk, side), sectors in track_and_sector_info[
-            "nominal_sectors_in_track"
-        ].items()
-        if trk in (0, 1) and side == 0
+        for track_and_side, sectors in track_and_sector_info.nominal_sectors_in_track.items()
+        if track_and_side.track in (0, 1) and track_and_side.side == 0
     )
     fat8_sides = 1 + max(
-        side
-        for trk, side in track_and_sector_info["nominal_sectors_in_track"].keys()
-        if trk in (0, 1)
+        track_and_side.side
+        for track_and_side in track_and_sector_info.nominal_sectors_in_track.keys()
+        if track_and_side.track in (0, 1)
     )
     fat8_sector_size = max(
-        max(
-            len(sector_data)
-            for sec_num, actual_data_offset, sector_data, sectors_in_track in sectors
-        )
-        for (trk, side), sectors in track_and_sector_info["track_sector_map"].items()
-        if trk in (0, 1) and side == 0
+        max(len(sector_info.sector_data) for sector_info in sectors)
+        for track_and_side, sectors in track_and_sector_info.track_sector_map.items()
+        if track_and_side.track in (0, 1) and track_and_side.side == 0
     )
     fat8_sector_shift = 0
     while fat8_sector_size > 0x100 and fat8_sectors_per_track < 16:
@@ -1186,7 +1238,7 @@ def guess_fat8_fmt_heuristics(track_and_sector_info):
         )
     )
     fat8_disk_size = (
-        track_and_sector_info["found_tracks"]
+        track_and_sector_info.found_tracks
         * fat8_sides
         * fat8_sectors_per_track
         * fat8_sector_size
@@ -1197,12 +1249,12 @@ def guess_fat8_fmt_heuristics(track_and_sector_info):
     fat8_bytes_per_track = fat8_sectors_per_track * fat8_sector_size
     fat8_clusters_per_track = min(2, fat8_bytes_per_track // fat8_est_bytes_per_cluster)
     fat8_total_clusters = (
-        track_and_sector_info["found_tracks"] * fat8_sides * fat8_clusters_per_track
+        track_and_sector_info.found_tracks * fat8_sides * fat8_clusters_per_track
     )
     fat8_sectors_per_cluster = fat8_sectors_per_track // fat8_clusters_per_track
     fat8_bytes_per_cluster = fat8_sectors_per_cluster * fat8_sector_size
     fat8_tracks = {36: 35, 41: 40, 78: 77, 81: 80}.get(
-        track_and_sector_info["found_tracks"], track_and_sector_info["found_tracks"]
+        track_and_sector_info.found_tracks, track_and_sector_info.found_tracks
     )
 
     metadata_track = (
@@ -1210,7 +1262,7 @@ def guess_fat8_fmt_heuristics(track_and_sector_info):
     )
     metadata_side = fat8_first_metadata_cluster // fat8_clusters_per_track % fat8_sides
 
-    fat8_fmt_name = f'Unknown format [{"Pasopia" if side_is_cluster_lsb else "PC-6001 mkII SR/6601 SR" if is_pc66sr_rxr else "N60/PC-6001/mkII/6601" if (is_pc66_sys or fat8_sides == 1) else "PC98" if is_pc98_sys else "N80/PC88"}-like {fat8_sides}-sided {track_and_sector_info["found_tracks"]}-track {fat8_sectors_per_track}-sectored (physical {track_and_sector_info["found_sectors"]}-sectored) with {len(boot_sector)}-byte boot sector beginning with {repr(boot_sector[:4])} (largest physical sector is {track_and_sector_info["largest_sector_size"]} bytes) with metadata in track {metadata_track} on side {metadata_side} and {fat8_clusters_per_track} clusters per track]'
+    fat8_format_name = f'Unknown format [{"Pasopia" if side_is_cluster_lsb else "PC-6001 mkII SR/6601 SR" if is_pc66sr_rxr else "N60/PC-6001/mkII/6601" if (is_pc66_sys or fat8_sides == 1) else "PC98" if is_pc98_sys else "N80/PC88"}-like {fat8_sides}-sided {track_and_sector_info.found_tracks}-track {fat8_sectors_per_track}-sectored (physical {track_and_sector_info.found_sectors}-sectored) with {len(boot_sector)}-byte boot sector beginning with {repr(boot_sector[:4])} (largest physical sector is {track_and_sector_info.largest_sector_size} bytes) with metadata in track {metadata_track} on side {metadata_side} and {fat8_clusters_per_track} clusters per track]'
     return dict(
         boot_sector=boot_sector,
         is_pc66sr_rxr=is_pc66sr_rxr,
@@ -1237,154 +1289,130 @@ def guess_fat8_fmt_heuristics(track_and_sector_info):
         fat8_tracks=fat8_tracks,
         metadata_track=metadata_track,
         metadata_side=metadata_side,
-        fat8_fmt_name=fat8_fmt_name,
+        fat8_format_name=fat8_format_name,
     )
 
 
-def check_known_fat8_fmts(track_and_sector_info, fat8_basic_info):
-    guessed_fmt_name, guessed_fmt, guessed_fmt_score = None, None, None
-    for fmt_name, fmt in KNOWN_FAT8_FMTS.items():
-        fmt_tracks = fmt["tracks"]
-        fmt_fat_tracks = fmt["fat_tracks"]
-        fmt_sides = fmt["sides"]
-        fmt_sectors = fmt["sectors"]
-        fmt_sector1_start_hints = fmt["sector1_start_hints"]
-        fmt_charset = fmt["charset"]
-        fmt_obfuscation = fmt["obfuscation"]
-        fmt_metadata_track = fmt["metadata_track"]
-        fmt_metadata_side = fmt["metadata_side"]
-        fmt_clusters_per_track = fmt["clusters_per_track"]
-        fmt_side_is_cluster_lsb = fmt["side_is_cluster_lsb"]
-        assert fmt == dict(
-            tracks=fmt_tracks,
-            fat_tracks=fmt_fat_tracks,
-            sides=fmt_sides,
-            sectors=fmt_sectors,
-            sector1_start_hints=fmt_sector1_start_hints,
-            charset=fmt_charset,
-            obfuscation=fmt_obfuscation,
-            metadata_track=fmt_metadata_track,
-            metadata_side=fmt_metadata_side,
-            clusters_per_track=fmt_clusters_per_track,
-            side_is_cluster_lsb=fmt_side_is_cluster_lsb,
-        )
-        if fmt_tracks != track_and_sector_info["found_tracks"]:
+def check_known_fat8_formats(track_and_sector_info: TrackAndSectorInfo, fat8_info):
+    guessed_format, guessed_format_score = None, None
+    for known_format in KNOWN_FAT8_FORMATS:
+        if known_format.tracks != track_and_sector_info.found_tracks:
             continue
-        if fmt_sides != fat8_basic_info["fat8_sides"]:
+        if known_format.sides != fat8_info["fat8_sides"]:
             continue
-        if fmt_sectors != fat8_basic_info["fat8_sectors_per_track"]:
+        if known_format.sectors != fat8_info["fat8_sectors_per_track"]:
             continue
-        fmt_score = sum(
+        known_format_score = sum(
             1
-            for hint in fmt_sector1_start_hints
-            if fat8_basic_info["boot_sector"] is not None
-            and hint(fat8_basic_info["boot_sector"])
+            for hint in known_format.sector1_start_hints
+            if fat8_info["boot_sector"] is not None and hint(fat8_info["boot_sector"])
         )
-        if guessed_fmt is None or fmt_score > guessed_fmt_score:
-            guessed_fmt_name, guessed_fmt, guessed_fmt_score = fmt_name, fmt, fmt_score
-    if guessed_fmt is not None:
-        fat8_basic_info["fat8_fmt_name"] = guessed_fmt_name
-        if guessed_fmt["charset"] is not None:
+        if guessed_format is None or known_format_score > guessed_format_score:
+            guessed_format, guessed_format_score = known_format, known_format_score
+    if guessed_format is not None:
+        fat8_info["fat8_format_name"] = guessed_format.name
+        if guessed_format.charset is not None:
             (
-                fat8_basic_info["decode_8bit_charset"],
-                fat8_basic_info["encode_8bit_charset"],
+                fat8_info["decode_8bit_charset"],
+                fat8_info["encode_8bit_charset"],
             ) = {
                 "pc6001-8bit": (decode_pc6001_8bit_charset, encode_pc6001_8bit_charset),
                 "pc98-8bit": (decode_pc98_8bit_charset, encode_pc98_8bit_charset),
-            }[
-                guessed_fmt["charset"]
-            ]
-            fat8_basic_info["fat8_8bit_charset"] = guessed_fmt["charset"]
-        if guessed_fmt["obfuscation"] is not None:
-            fat8_basic_info["deobfuscate_byte"], fat8_basic_info["obfuscate_byte"] = {
+            }[guessed_format.charset]
+            fat8_info["fat8_8bit_charset"] = guessed_format.charset
+        if guessed_format.obfuscation is not None:
+            fat8_info["deobfuscate_byte"], fat8_info["obfuscate_byte"] = {
                 "pc98": (deobfuscate_byte_pc98, obfuscate_byte_pc98),
                 "pc88": (deobfuscate_byte_pc88, obfuscate_byte_pc88),
-            }[guessed_fmt["obfuscation"]]
+            }[guessed_format.obfuscation]
         else:
-            fat8_basic_info["deobfuscate_byte"], fat8_basic_info["obfuscate_byte"] = (
+            fat8_info["deobfuscate_byte"], fat8_info["obfuscate_byte"] = (
                 no_obfuscation,
                 no_obfuscation,
             )
-        fat8_basic_info["fat8_obfuscation"] = guessed_fmt["obfuscation"]
-        fat8_basic_info["metadata_track"] = guessed_fmt["metadata_track"]
-        fat8_basic_info["metadata_side"] = guessed_fmt["metadata_side"]
-        fat8_basic_info["fat8_clusters_per_track"] = guessed_fmt["clusters_per_track"]
-        fat8_basic_info["fat8_first_metadata_cluster"] = (
-            fat8_basic_info["metadata_track"] * fat8_basic_info["fat8_sides"]
-            + fat8_basic_info["metadata_side"]
-        ) * fat8_basic_info["fat8_clusters_per_track"]
-        fat8_basic_info["side_is_cluster_lsb"] = guessed_fmt["side_is_cluster_lsb"]
-        fat8_basic_info["fat8_tracks"] = guessed_fmt["fat_tracks"]
-    return fat8_basic_info
+        fat8_info["fat8_obfuscation"] = guessed_format.obfuscation
+        fat8_info["metadata_track"] = guessed_format.metadata_track
+        fat8_info["metadata_side"] = guessed_format.metadata_side
+        fat8_info["fat8_clusters_per_track"] = guessed_format.clusters_per_track
+        fat8_info["fat8_first_metadata_cluster"] = (
+            fat8_info["metadata_track"] * fat8_info["fat8_sides"]
+            + fat8_info["metadata_side"]
+        ) * fat8_info["fat8_clusters_per_track"]
+        fat8_info["side_is_cluster_lsb"] = guessed_format.side_is_cluster_lsb
+        fat8_info["fat8_tracks"] = guessed_format.fat_tracks
+    return fat8_info
 
 
-def analyze_fat8_fmt(track_and_sector_info):
-    fat8_basic_info = guess_fat8_fmt_heuristics(
+class MetadataIndices(NamedTuple):
+    fat_sector_indices: Set[int]
+    autorun_sector_index: int
+    dir_sector_indices: Set[int]
+    metadata_cluster_indices: Set[int]
+
+
+def analyze_fat8_format(track_and_sector_info: TrackAndSectorInfo):
+    fat8_info = guess_fat8_format_heuristics(
         track_and_sector_info=track_and_sector_info
     )
-    fat8_basic_info = check_known_fat8_fmts(
-        track_and_sector_info=track_and_sector_info, fat8_basic_info=fat8_basic_info
+    fat8_info = check_known_fat8_formats(
+        track_and_sector_info=track_and_sector_info, fat8_info=fat8_info
     )
 
-    fat8_basic_info["fat8_total_clusters"] = (
-        fat8_basic_info["fat8_tracks"]
-        * fat8_basic_info["fat8_sides"]
-        * fat8_basic_info["fat8_clusters_per_track"]
+    fat8_info["fat8_total_clusters"] = (
+        fat8_info["fat8_tracks"]
+        * fat8_info["fat8_sides"]
+        * fat8_info["fat8_clusters_per_track"]
     )
-    fat8_basic_info["fat8_sectors_per_cluster"] = (
-        fat8_basic_info["fat8_sectors_per_track"]
-        // fat8_basic_info["fat8_clusters_per_track"]
+    fat8_info["fat8_sectors_per_cluster"] = (
+        fat8_info["fat8_sectors_per_track"] // fat8_info["fat8_clusters_per_track"]
     )
-    fat8_basic_info["fat8_bytes_per_cluster"] = (
-        fat8_basic_info["fat8_sectors_per_cluster"]
-        * fat8_basic_info["fat8_sector_size"]
+    fat8_info["fat8_bytes_per_cluster"] = (
+        fat8_info["fat8_sectors_per_cluster"] * fat8_info["fat8_sector_size"]
     )
     fat_sector_indices = {
-        fat8_basic_info["fat8_sectors_per_track"] - 2,
-        fat8_basic_info["fat8_sectors_per_track"] - 1,
-        fat8_basic_info["fat8_sectors_per_track"] - 0,
+        fat8_info["fat8_sectors_per_track"] - 2,
+        fat8_info["fat8_sectors_per_track"] - 1,
+        fat8_info["fat8_sectors_per_track"] - 0,
     }
-    autorun_sector_index = fat8_basic_info["fat8_sectors_per_track"] - 3
+    autorun_sector_index = fat8_info["fat8_sectors_per_track"] - 3
     dir_sector_indices = set(range(1, autorun_sector_index))
     metadata_cluster_indices = (
         set(
             range(
-                fat8_basic_info["metadata_track"]
-                * fat8_basic_info["fat8_clusters_per_track"]
-                * fat8_basic_info["fat8_sides"]
-                + fat8_basic_info["metadata_side"],
-                (1 + fat8_basic_info["metadata_track"])
-                * fat8_basic_info["fat8_clusters_per_track"]
-                * fat8_basic_info["fat8_sides"]
-                + fat8_basic_info["metadata_side"],
-                fat8_basic_info["fat8_sides"],
+                fat8_info["metadata_track"]
+                * fat8_info["fat8_clusters_per_track"]
+                * fat8_info["fat8_sides"]
+                + fat8_info["metadata_side"],
+                (1 + fat8_info["metadata_track"])
+                * fat8_info["fat8_clusters_per_track"]
+                * fat8_info["fat8_sides"]
+                + fat8_info["metadata_side"],
+                fat8_info["fat8_sides"],
             )
         )
-        if fat8_basic_info["side_is_cluster_lsb"]
+        if fat8_info["side_is_cluster_lsb"]
         else set(
             range(
                 (
-                    fat8_basic_info["metadata_track"] * fat8_basic_info["fat8_sides"]
-                    + fat8_basic_info["metadata_side"]
+                    fat8_info["metadata_track"] * fat8_info["fat8_sides"]
+                    + fat8_info["metadata_side"]
                 )
-                * fat8_basic_info["fat8_clusters_per_track"],
+                * fat8_info["fat8_clusters_per_track"],
                 (
                     1
                     + (
-                        fat8_basic_info["metadata_track"]
-                        * fat8_basic_info["fat8_sides"]
-                        + fat8_basic_info["metadata_side"]
+                        fat8_info["metadata_track"] * fat8_info["fat8_sides"]
+                        + fat8_info["metadata_side"]
                     )
                 )
-                * fat8_basic_info["fat8_clusters_per_track"],
+                * fat8_info["fat8_clusters_per_track"],
             )
         )
     )
     assert (
-        fat8_basic_info["fat8_first_metadata_cluster"]
-        == sorted(metadata_cluster_indices)[0]
+        fat8_info["fat8_first_metadata_cluster"] == sorted(metadata_cluster_indices)[0]
     )
-    return fat8_basic_info | dict(
+    return fat8_info, MetadataIndices(
         fat_sector_indices=fat_sector_indices,
         autorun_sector_index=autorun_sector_index,
         dir_sector_indices=dir_sector_indices,
@@ -1392,9 +1420,14 @@ def analyze_fat8_fmt(track_and_sector_info):
     )
 
 
-def log_fmt_diagnostics(track_and_sector_info, fat8_info, output):
+def log_format_diagnostics(
+    track_and_sector_info: TrackAndSectorInfo,
+    fat8_info,
+    metadata_indices: MetadataIndices,
+    output,
+):
     output.append("\n== Diagnostic Information ==")
-    output.append(f"Detected format name: {fat8_info['fat8_fmt_name']}")
+    output.append(f"Detected format name: {fat8_info['fat8_format_name']}")
     output.append(f"8-bit character set: {fat8_info['fat8_8bit_charset']}")
     output.append(
         f"BASIC obfuscation method: {fat8_info['fat8_obfuscation']}{'; unable to deobfuscate' if fat8_info['fat8_obfuscation'] is None else ''}"
@@ -1405,13 +1438,13 @@ def log_fmt_diagnostics(track_and_sector_info, fat8_info, output):
     output.append(f"Is PC66 SYS: {fat8_info['is_pc66_sys']}")
     output.append(f"Is PC66SR RXR: {fat8_info['is_pc66sr_rxr']}")
     output.append(f"Is PC98 boot sector: {fat8_info['is_pc98_sys']}")
-    output.append(f"D88 track count: {track_and_sector_info['found_tracks']}")
-    output.append(f"D88 side count: {track_and_sector_info['found_sides']}")
-    output.append(f"D88 highest sector index: {track_and_sector_info['found_sectors']}")
-    output.append(f"D88 total sectors: {track_and_sector_info['found_total_sectors']}")
-    output.append(f"D88 disk size: {track_and_sector_info['found_disk_size']}")
+    output.append(f"D88 track count: {track_and_sector_info.found_tracks}")
+    output.append(f"D88 side count: {track_and_sector_info.found_sides}")
+    output.append(f"D88 highest sector index: {track_and_sector_info.found_sectors}")
+    output.append(f"D88 total sectors: {track_and_sector_info.found_total_sectors}")
+    output.append(f"D88 disk size: {track_and_sector_info.found_disk_size}")
     output.append(
-        f"Largest D88 sector size: {track_and_sector_info['largest_sector_size']}"
+        f"Largest D88 sector size: {track_and_sector_info.largest_sector_size}"
     )
     output.append(f"Nominal D88 side count: {fat8_info['fat8_sides']}")
     output.append(f"Nominal D88 disk size: {fat8_info['fat8_disk_size']}")
@@ -1437,13 +1470,13 @@ def log_fmt_diagnostics(track_and_sector_info, fat8_info, output):
     output.append(f"Metadata track: {fat8_info['metadata_track']}")
     output.append(f"Metadata side: {fat8_info['metadata_side']}")
     output.append(
-        f"Directory virtual sector indices: {', '.join(f'{idx}' for idx in sorted(tuple(fat8_info['dir_sector_indices'])))}"
+        f"Directory virtual sector indices: {', '.join(f'{idx}' for idx in sorted(tuple(metadata_indices.dir_sector_indices)))}"
     )
     output.append(
-        f"Autorun data virtual sector index: {fat8_info['autorun_sector_index']}"
+        f"Autorun data virtual sector index: {metadata_indices.autorun_sector_index}"
     )
     output.append(
-        f"FAT virtual sector indices: {', '.join(f'{idx}' for idx in sorted(tuple(fat8_info['fat_sector_indices'])))}"
+        f"FAT virtual sector indices: {', '.join(f'{idx}' for idx in sorted(tuple(metadata_indices.fat_sector_indices)))}"
     )
 
 
@@ -1574,10 +1607,17 @@ def extend_name(base_filename, name_tail):
     return ".".join(parts)
 
 
-def analyze_metadata_track(track_and_sector_info, fat8_info):
+def analyze_metadata_track(
+    track_and_sector_info: TrackAndSectorInfo,
+    fat8_info,
+    metadata_indices: MetadataIndices,
+):
     # parse metadata track; for directory entries, make matching names for the host file system
-    metadata_sectors = track_and_sector_info["track_sector_map"].get(
-        (fat8_info["metadata_track"], fat8_info["metadata_side"]), []
+    metadata_sectors: List[SectorInfo] = track_and_sector_info.track_sector_map.get(
+        TrackAndSide(
+            track=fat8_info["metadata_track"], side=fat8_info["metadata_side"]
+        ),
+        [],
     )
     directory_entries = []
     fat_sectors = {}
@@ -1599,7 +1639,7 @@ def analyze_metadata_track(track_and_sector_info, fat8_info):
                 * (1 + ((vsec_num - 1) % (1 << fat8_info["fat8_sector_shift"])))
             ]
             raw_metadata_sectors[vsec_num] = vdata
-            if vsec_num in fat8_info["dir_sector_indices"] and not end_of_directory:
+            if vsec_num in metadata_indices.dir_sector_indices and not end_of_directory:
                 for i in range(0, 256, 16):
                     entry = vdata[i : i + 16]
                     raw_name = entry[0:6]
@@ -1673,9 +1713,9 @@ def analyze_metadata_track(track_and_sector_info, fat8_info):
                         else:
                             used_filenames[name + "." + ext] = parsed_entry
                     directory_entries.append(parsed_entry)
-            elif vsec_num in fat8_info["fat_sector_indices"]:
+            elif vsec_num in metadata_indices.fat_sector_indices:
                 fat_sectors[vsec_num] = vdata
-            elif vsec_num == fat8_info["autorun_sector_index"]:
+            elif vsec_num == metadata_indices.autorun_sector_index:
                 autorun_data = vdata
     return dict(
         directory_entries=directory_entries,
@@ -1759,9 +1799,11 @@ def log_boot_sector(fat8_info, output):
         )
 
 
-def log_raw_directory_sectors(fat8_info, metadata_track_info, output):
+def log_raw_directory_sectors(
+    fat8_info, metadata_indices: MetadataIndices, metadata_track_info, output
+):
     output.append("\n== Raw directory sectors ==")
-    for vsec_num in sorted(fat8_info["dir_sector_indices"]):
+    for vsec_num in sorted(metadata_indices.dir_sector_indices):
         sector_data = metadata_track_info["raw_metadata_sectors"].get(vsec_num)
         if sector_data is not None:
             if sector_data == b"\xff" * len(sector_data):
@@ -1777,10 +1819,12 @@ def log_raw_directory_sectors(fat8_info, metadata_track_info, output):
             output.append(f"Missing directory sector {vsec_num:2}")
 
 
-def log_autorun_data(fat8_info, metadata_track_info, output):
+def log_autorun_data(
+    fat8_info, metadata_indices: MetadataIndices, metadata_track_info, output
+):
     if metadata_track_info["autorun_data"] is not None:
         output.append(
-            f"\n== Autorun/ID Sector {fat8_info['autorun_sector_index']:2} =={'':33}╭{'─' * 16}╮"
+            f"\n== Autorun/ID Sector {metadata_indices.autorun_sector_index:2} =={'':33}╭{'─' * 16}╮"
         )
         hexdump_entry_data(
             metadata_track_info["autorun_data"],
@@ -1799,7 +1843,9 @@ def log_autorun_data(fat8_info, metadata_track_info, output):
         )
 
 
-def check_fat_sectors(fat8_info, metadata_track_info, output):
+def check_fat_sectors(
+    fat8_info, metadata_indices: MetadataIndices, metadata_track_info, output
+):
     first_fat_sector_idx = (
         sorted(metadata_track_info["fat_sectors"].keys())[0]
         if metadata_track_info["fat_sectors"]
@@ -1824,10 +1870,10 @@ def check_fat_sectors(fat8_info, metadata_track_info, output):
                 f"Unusable first FAT, it does not reserve cluster 0x{FAT8_BOOT_SECTOR_CLUSTER:02X} for boot sector"
             )
             usable_fat = False
-        for cluster_idx in sorted(fat8_info["metadata_cluster_indices"]):
-            if fat1[cluster_idx] not in {FAT8_CHAIN_TERMINAL_LINK} | fat8_info[
-                "metadata_cluster_indices"
-            ] | set(
+        for cluster_idx in sorted(metadata_indices.metadata_cluster_indices):
+            if fat1[cluster_idx] not in {
+                FAT8_CHAIN_TERMINAL_LINK
+            } | metadata_indices.metadata_cluster_indices | set(
                 range(
                     FAT8_FINAL_CLUSTER_OFFSET,
                     FAT8_FINAL_CLUSTER_OFFSET
@@ -1974,7 +2020,7 @@ def quote_filename(filename):
 
 
 def reconstruct_file_data(
-    track_and_sector_info, fat8_info, metadata_track_info, output
+    track_and_sector_info: TrackAndSectorInfo, fat8_info, metadata_track_info, output
 ):
     # reconstructs file data while analyzing FAT chains
     for idx, entry in sorted(
@@ -2044,8 +2090,10 @@ def reconstruct_file_data(
                         fat8_info["fat8_sectors_per_track"]
                         // fat8_info["fat8_clusters_per_track"]
                     )
-                cluster_sectors = track_and_sector_info["track_sector_map"].get(
-                    (cluster_track, cluster_side), []
+                cluster_sectors: SectorInfo = (
+                    track_and_sector_info.track_sector_map.get(
+                        TrackAndSide(track=cluster_track, side=cluster_side), []
+                    )
                 )
                 cluster_sector_list = []
                 for cluster_sec_num in range(
@@ -2212,8 +2260,10 @@ def extract_boot_sector(outdir, fat8_info):
             f.write(fat8_info["decode_8bit_charset"](fat8_info["boot_sector"]))
 
 
-def extract_raw_directory_sectors(outdir, fat8_info, metadata_track_info):
-    for vsec_num in sorted(fat8_info["dir_sector_indices"]):
+def extract_raw_directory_sectors(
+    outdir, fat8_info, metadata_indices: MetadataIndices, metadata_track_info
+):
+    for vsec_num in sorted(metadata_indices.dir_sector_indices):
         sector_data = metadata_track_info["raw_metadata_sectors"].get(vsec_num)
         if sector_data is None:
             continue
@@ -2288,10 +2338,17 @@ def extract_file_contents(outdir, fat8_info, metadata_track_info):
                     f.write(fat8_info["decode_8bit_charset"](file_deobf_data))
 
 
-def extract_everything(disk_info, d88_path, fat8_info, metadata_track_info, output):
+def extract_everything(
+    disk_info: DiskInfo,
+    d88_path: str,
+    fat8_info,
+    metadata_indices: MetadataIndices,
+    metadata_track_info,
+    output,
+):
     outdir = (
         os.path.splitext(os.path.basename(d88_path))[0]
-        + f"{disk_info['disk_suffix']} [FAT8 Contents]"
+        + f"{disk_info.disk_suffix} [FAT8 Contents]"
     )
 
     disambig = ""
@@ -2305,7 +2362,10 @@ def extract_everything(disk_info, d88_path, fat8_info, metadata_track_info, outp
     save_log(outdir=outdir, output=output)
     extract_boot_sector(outdir=outdir, fat8_info=fat8_info)
     extract_raw_directory_sectors(
-        outdir=outdir, fat8_info=fat8_info, metadata_track_info=metadata_track_info
+        outdir=outdir,
+        fat8_info=fat8_info,
+        metadata_indices=metadata_indices,
+        metadata_track_info=metadata_track_info,
     )
     extract_autorun_data(
         outdir=outdir, fat8_info=fat8_info, metadata_track_info=metadata_track_info
@@ -2316,32 +2376,48 @@ def extract_everything(disk_info, d88_path, fat8_info, metadata_track_info, outp
     extract_file_contents(
         outdir=outdir, fat8_info=fat8_info, metadata_track_info=metadata_track_info
     )
-    print(f"\nDone.{disk_info['disk_suffix']}")
+    print(f"\nDone.{disk_info.disk_suffix}")
 
 
-def fat8_d88_tool(d88_path, d88_data, disk_idx=1):
+def fat8_d88_tool(d88_path: str, d88_data: bytes, disk_idx: int = 1):
     output = start_log()
     disk_info = analyze_disk(d88_data=d88_data, disk_idx=disk_idx)
     log_disk_information(disk_info=disk_info, output=output)
     track_and_sector_info = analyze_tracks_and_sectors(
         d88_data=d88_data, disk_info=disk_info, output=output
     )
-    fat8_info = analyze_fat8_fmt(track_and_sector_info=track_and_sector_info)
-    log_fmt_diagnostics(
-        track_and_sector_info=track_and_sector_info, fat8_info=fat8_info, output=output
+    fat8_info, metadata_indices = analyze_fat8_format(
+        track_and_sector_info=track_and_sector_info
+    )
+    log_format_diagnostics(
+        track_and_sector_info=track_and_sector_info,
+        fat8_info=fat8_info,
+        metadata_indices=metadata_indices,
+        output=output,
     )
     metadata_track_info = analyze_metadata_track(
-        track_and_sector_info=track_and_sector_info, fat8_info=fat8_info
+        track_and_sector_info=track_and_sector_info,
+        fat8_info=fat8_info,
+        metadata_indices=metadata_indices,
     )
     log_boot_sector(fat8_info=fat8_info, output=output)
     log_raw_directory_sectors(
-        fat8_info=fat8_info, metadata_track_info=metadata_track_info, output=output
+        fat8_info=fat8_info,
+        metadata_indices=metadata_indices,
+        metadata_track_info=metadata_track_info,
+        output=output,
     )
     log_autorun_data(
-        fat8_info=fat8_info, metadata_track_info=metadata_track_info, output=output
+        fat8_info=fat8_info,
+        metadata_indices=metadata_indices,
+        metadata_track_info=metadata_track_info,
+        output=output,
     )
     fat1 = check_fat_sectors(
-        fat8_info=fat8_info, metadata_track_info=metadata_track_info, output=output
+        fat8_info=fat8_info,
+        metadata_indices=metadata_indices,
+        metadata_track_info=metadata_track_info,
+        output=output,
     )
     analyze_fat_chains(
         fat8_info=fat8_info,
@@ -2369,11 +2445,12 @@ def fat8_d88_tool(d88_path, d88_data, disk_idx=1):
         disk_info=disk_info,
         d88_path=d88_path,
         fat8_info=fat8_info,
+        metadata_indices=metadata_indices,
         metadata_track_info=metadata_track_info,
         output=output,
     )
-    if len(d88_data) > disk_info["disk_sz"]:
-        fat8_d88_tool(d88_path, d88_data[disk_info["disk_sz"] :], disk_idx + 1)
+    if len(d88_data) > disk_info.disk_sz:
+        fat8_d88_tool(d88_path, d88_data[disk_info.disk_sz :], disk_idx + 1)
 
 
 def smoke_test_everything():
