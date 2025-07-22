@@ -24,7 +24,7 @@ After a lot of banging my head against the wall and AI's, and eventually rewriti
 # System detection
 The FAT8 used on these various NEC PC's seems to have varied a bit in terms of where the metadata track (containing directory, autostart/ID information, and triplicate FAT) is stored, and also in terms of how it is laid out. At the moment the disk parameters (especially the number of sides) and information about the sectors in tracks 0 and 1 (especially the size of the first sector in track 0 along with its contents) are used to attempt to determine which flavor is used. This also determines which character set will be used when constructing filenames or displaying hexadecimal dumps or other debug information.
 
-Some common formats are listed in `KNOWN_FAT8_FMTS` to improve heuristic detection.
+Some common formats are listed in `KNOWN_FAT8_FORMATS` to improve heuristic detection.
 
 # 8-bit/single-byte character set used for PC88/PC98
 I am sure this is not the best way to solve this. This mapping should work OK for PC-8001 series, PC-8801 series, and PC-98/PC-9821 series and compatibles when displaying an 8-bit character set with no kanji support. Once a kanji ROM gets involved the problem gets a whole lot trickier since these "narrow" single-byte characters map to the same Unicode as those double-byte (but sometimes single-width!) ones. In some cases those are visually distinct, in other cases not. In any case, there will be ambiguity or other escaping mechanisms will be needed. Characters from the private use area are used to handle various unassigned or ambiguous mappings. I considered '\N{no-break space}' for b'\xA0' but it seems semantically wrong. The kanji here are supposed to be halfwidth but Unicode lacks a way to express that.
