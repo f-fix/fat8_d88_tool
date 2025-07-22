@@ -244,7 +244,7 @@ KNOWN_FAT8_FORMATS = [
 
 NO_CONTROLS = b""
 MINIMAL_CONTROLS = b"\0\r\n\x1a\x7f"
-ASCII_CONTROLS = bytes([i for i in range(0x20)] + [0x7F])
+ASCII_CONTROLS = bytes(range(0x20)) + b"\x7f"
 
 # i am sure this is not the best way to solve this. this mapping
 # should work OK for PC-8001 series, PC-8801 series, and PC-98/PC-9821
@@ -340,22 +340,26 @@ def smoke_test_pc98_8bit_charset():
         for i in range(256)
         if encode_pc98_8bit_charset(decode_pc98_8bit_charset(bytes([i]))) != bytes([i])
     }
-    round_trip_test_failures |= {
-        encode_pc98_8bit_charset(decode_pc98_8bit_charset(bytes([i, 0xEE]))): bytes(
-            [i, 0xEE]
-        )
-        for i in range(256)
-        if encode_pc98_8bit_charset(decode_pc98_8bit_charset(bytes([i, 0xEE])))
-        != bytes([i, 0xEE])
-    }
-    round_trip_test_failures |= {
-        encode_pc98_8bit_charset(decode_pc98_8bit_charset(bytes([i, 0xEF]))): bytes(
-            [i, 0xEF]
-        )
-        for i in range(256)
-        if encode_pc98_8bit_charset(decode_pc98_8bit_charset(bytes([i, 0xEF])))
-        != bytes([i, 0xEF])
-    }
+    round_trip_test_failures.update(
+        {
+            encode_pc98_8bit_charset(decode_pc98_8bit_charset(bytes([i, 0xEE]))): bytes(
+                [i, 0xEE]
+            )
+            for i in range(256)
+            if encode_pc98_8bit_charset(decode_pc98_8bit_charset(bytes([i, 0xEE])))
+            != bytes([i, 0xEE])
+        }
+    )
+    round_trip_test_failures.update(
+        {
+            encode_pc98_8bit_charset(decode_pc98_8bit_charset(bytes([i, 0xEF]))): bytes(
+                [i, 0xEF]
+            )
+            for i in range(256)
+            if encode_pc98_8bit_charset(decode_pc98_8bit_charset(bytes([i, 0xEF])))
+            != bytes([i, 0xEF])
+        }
+    )
     assert not round_trip_test_failures, round_trip_test_failures
     unicode_test = (
         "\r\n".join(
@@ -614,30 +618,36 @@ def smoke_test_pc6001_8bit_charset():
         if encode_pc6001_8bit_charset(decode_pc6001_8bit_charset(bytes([i])))
         != bytes([i])
     }
-    round_trip_test_failures |= {
-        encode_pc6001_8bit_charset(decode_pc6001_8bit_charset(bytes([0x14, i]))): bytes(
-            [0x14, i]
-        )
-        for i in range(256)
-        if encode_pc6001_8bit_charset(decode_pc6001_8bit_charset(bytes([0x14, i])))
-        != bytes([0x14, i])
-    }
-    round_trip_test_failures |= {
-        encode_pc6001_8bit_charset(decode_pc6001_8bit_charset(bytes([i, 0xEE]))): bytes(
-            [i, 0xEE]
-        )
-        for i in range(256)
-        if encode_pc6001_8bit_charset(decode_pc6001_8bit_charset(bytes([i, 0xEE])))
-        != bytes([i, 0xEE])
-    }
-    round_trip_test_failures |= {
-        encode_pc6001_8bit_charset(decode_pc6001_8bit_charset(bytes([i, 0xEF]))): bytes(
-            [i, 0xEF]
-        )
-        for i in range(256)
-        if encode_pc6001_8bit_charset(decode_pc6001_8bit_charset(bytes([i, 0xEF])))
-        != bytes([i, 0xEF])
-    }
+    round_trip_test_failures.update(
+        {
+            encode_pc6001_8bit_charset(
+                decode_pc6001_8bit_charset(bytes([0x14, i]))
+            ): bytes([0x14, i])
+            for i in range(256)
+            if encode_pc6001_8bit_charset(decode_pc6001_8bit_charset(bytes([0x14, i])))
+            != bytes([0x14, i])
+        }
+    )
+    round_trip_test_failures.update(
+        {
+            encode_pc6001_8bit_charset(
+                decode_pc6001_8bit_charset(bytes([i, 0xEE]))
+            ): bytes([i, 0xEE])
+            for i in range(256)
+            if encode_pc6001_8bit_charset(decode_pc6001_8bit_charset(bytes([i, 0xEE])))
+            != bytes([i, 0xEE])
+        }
+    )
+    round_trip_test_failures.update(
+        {
+            encode_pc6001_8bit_charset(
+                decode_pc6001_8bit_charset(bytes([i, 0xEF]))
+            ): bytes([i, 0xEF])
+            for i in range(256)
+            if encode_pc6001_8bit_charset(decode_pc6001_8bit_charset(bytes([i, 0xEF])))
+            != bytes([i, 0xEF])
+        }
+    )
     assert not round_trip_test_failures, round_trip_test_failures
     unicode_test = (
         "\r\n".join(
@@ -836,43 +846,48 @@ def smoke_test_pc98_deobfuscation():
 # this and recovered the "combined XOR key" from my save file.
 #
 # Here's the BASIC program I typed in for key recovery:
-# ```basic
-# 10 ' The length of the comment is important. Do not change it! It needs to leave the first byte of KP$ at file offset 143. '''''''
-# 20 KP$="▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂"
-# 30 WIDTH 80:SCREEN,,0:CLS
-# 40 V1$="":FOR J=11 TO 1 STEP -1:FOR I=13 TO 1 STEP -1:V1$=V1$+CHR$(128+I):NEXT I:NEXT J
-# 50 IF KP$<>V1$ THEN PRINT"Program is corrupt. Re-enter:":PRINT"20 KP$="+CHR$(34)+V1$+CHR$(34):STOP
-# 60 PRINT"Saving known plaintext in temporary file TMP."
-# 70 SAVE"TMP"
-# 80 PRINT"Verifying known plaintext in temporary file TMP."
-# 90 OPEN"TMP"FOR INPUT AS #1
-# 100 XP$=INPUT$(143,1) ' Padding
-# 110 VP$=INPUT$(143,1) ' To verify
-# 120 CLOSE #1
-# 130 KILL"TMP"
-# 140 PRINT"Removing temporary file TMP."
-# 150 IF KP$<>VP$ THEN PRINT"KP$<>VP$":PRINT"KP$:";KP$:PRINT"VP$:"VP$:STOP
-# 160 PRINT"Saving ciphertext in temporary file TMP."
-# 170 SAVE"TMP",P
-# 180 PRINT"Reading cyphertext from temporary file TMP."
-# 190 OPEN"TMP"FOR INPUT AS #1
-# 200 CX$=INPUT$(143,1) ' Padding
-# 210 CT$=INPUT$(143,1) ' To verify
-# 220 CLOSE #1
-# 230 KILL"TMP"
-# 240 PRINT"Removing temporary file TMP."
-# 250 CK$="":FOR I=0 TO 142:CK$=CK$+CHR$(((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR 128):NEXT I
-# 260 PRINT"Combined key:":FOR I=1 TO LEN(CK$):PRINT MID$(HEX$(256+ASC(MID$(CK$,I,1))),2);" ";:NEXT I:PRINT
-# 270 DC$="":FOR I=0 TO LEN(CT$)-1:DC$=DC$+CHR$(((((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR ASC(MID$(CK$,1+(I MOD 143),1)))+13-(I MOD 13))MOD 256):NEXT I
-# 280 IF KP$<>DC$ THEN PRINT"KP$<>DC$":PRINT"KP$:";KP$:PRINT"DC$:"DC$:STOP
-# 290 PRINT"Combined key has been verified to decrypt plaintext without ROM data."
-# 300 PRINT"Saving combined key in CK.DAT."
-# 310 OPEN"CK.DAT" FOR OUTPUT AS #1
-# 320 PRINT #1,CK$;
-# 330 CLOSE #1
-# 340 PRINT"Done."
-# 350 END
-# ```
+PC88_KEY_RECOVERY_BASIC = (
+    "\r\n".join(
+        [
+            "10 ' The length of the comment is important. Do not change it! It needs to leave the first byte of KP$ at file offset 143. '''''''",
+            '20 KP$="▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂▊▋▌▍▎▏█▇▆▅▄▃▂"',
+            "30 WIDTH 80:SCREEN,,0:CLS",
+            '40 V1$="":FOR J=11 TO 1 STEP -1:FOR I=13 TO 1 STEP -1:V1$=V1$+CHR$(128+I):NEXT I:NEXT J',
+            '50 IF KP$<>V1$ THEN PRINT"Program is corrupt. Re-enter:":PRINT"20 KP$="+CHR$(34)+V1$+CHR$(34):STOP',
+            '60 PRINT"Saving known plaintext in temporary file TMP."',
+            '70 SAVE"TMP"',
+            '80 PRINT"Verifying known plaintext in temporary file TMP."',
+            '90 OPEN"TMP"FOR INPUT AS #1',
+            "100 XP$=INPUT$(143,1) ' Padding",
+            "110 VP$=INPUT$(143,1) ' To verify",
+            "120 CLOSE #1",
+            '130 KILL"TMP"',
+            '140 PRINT"Removing temporary file TMP."',
+            '150 IF KP$<>VP$ THEN PRINT"KP$<>VP$":PRINT"KP$:";KP$:PRINT"VP$:"VP$:STOP',
+            '160 PRINT"Saving ciphertext in temporary file TMP."',
+            '170 SAVE"TMP",P',
+            '180 PRINT"Reading cyphertext from temporary file TMP."',
+            '190 OPEN"TMP"FOR INPUT AS #1',
+            "200 CX$=INPUT$(143,1) ' Padding",
+            "210 CT$=INPUT$(143,1) ' To verify",
+            "220 CLOSE #1",
+            '230 KILL"TMP"',
+            '240 PRINT"Removing temporary file TMP."',
+            '250 CK$="":FOR I=0 TO 142:CK$=CK$+CHR$(((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR 128):NEXT I',
+            '260 PRINT"Combined key:":FOR I=1 TO LEN(CK$):PRINT MID$(HEX$(256+ASC(MID$(CK$,I,1))),2);" ";:NEXT I:PRINT',
+            '270 DC$="":FOR I=0 TO LEN(CT$)-1:DC$=DC$+CHR$(((((ASC(MID$(CT$,I+1,1))+256-11+(I MOD 11))MOD 256)XOR ASC(MID$(CK$,1+(I MOD 143),1)))+13-(I MOD 13))MOD 256):NEXT I',
+            '280 IF KP$<>DC$ THEN PRINT"KP$<>DC$":PRINT"KP$:";KP$:PRINT"DC$:"DC$:STOP',
+            '290 PRINT"Combined key has been verified to decrypt plaintext without ROM data."',
+            '300 PRINT"Saving combined key in CK.DAT."',
+            '310 OPEN"CK.DAT" FOR OUTPUT AS #1',
+            "320 PRINT #1,CK$;",
+            "330 CLOSE #1",
+            '340 PRINT"Done."',
+            "350 END",
+        ]
+    )
+    + "\r\n"
+)
 
 # Here's the combined key material from CK.DAT:
 PC88_COMBINED_KEY = bytes.fromhex(
@@ -917,13 +932,40 @@ def obfuscate_byte_pc88(i, byt):
 
 
 def smoke_test_p88_deobfuscation():
+    # TODO: implement a PC88 tokenizer/detokenizer and use it so that
+    # `KP$` can be recovered from the same tokenized byte sequence
+    # used on the PC88; in the meantime, this relies on the tokens on
+    # the first two lines having basically the same length as their
+    # "ASCII" representations, except that the `'` comment indicator
+    # becomes three bytes
+    key_recovery_program_asc = encode_pc98_8bit_charset(PC88_KEY_RECOVERY_BASIC)
+    fake_program_lines = [
+        int(line_number.decode("us-ascii"), 10).to_bytes(2, "little")
+        + (b":\x8f\xe9" + txt[1:] if txt.startswith(b"'") else txt)
+        + b"\0"
+        for line_number, txt in [
+            line.split(b" ", 1)
+            for line in key_recovery_program_asc.split(b"\r\n")
+            if line
+        ]
+    ]
+    fake_tokens = b""
+    fake_next_load_addr = 0x0001
+    for line_number_and_tokens in fake_program_lines:
+        fake_next_load_addr += 2 + len(line_number_and_tokens)
+        fake_tokens += (
+            fake_next_load_addr.to_bytes(2, "little") + line_number_and_tokens
+        )
+    fake_tokens += b"\0\0"
+    vp = fake_tokens[143 : 2 * 143]
     # This part of the smoke test mimics the BASIC combined XOR key
     # recovery program to ensure the same result is achievable using
     # the combined XOR key implementation written in Python
     kp = encode_pc98_8bit_charset("▊▋▌▍▎▏█▇▆▅▄▃▂") * 11
     assert len(kp) == 11 * 13
-    vp = bytes([128 + 13 - i for i in range(13)] * 11)
-    assert len(vp) == 11 * 13
+    v1 = bytes([128 + 13 - i for i in range(13)] * 11)
+    assert len(v1) == 11 * 13
+    assert kp == v1, f"{kp} vs. {v1}"
     assert kp == vp, f"{kp} vs. {vp}"
     ct = bytes([obfuscate_byte_pc88(i, kp[i]) for i in range(len(kp))])
     assert len(ct) == 11 * 13
@@ -934,7 +976,9 @@ def smoke_test_p88_deobfuscation():
     ck = bytes(
         [((ct[i] + 0x100 - 11 + (i % 11)) % 0x100) ^ 0x80 for i in range(len(ct))]
     )
-    assert ck == PC88_COMBINED_KEY, f"ck={ck} vs. PC88_COMBINED_KEY={PC88_COMBINED_KEY}"
+    assert (
+        ck == PC88_COMBINED_KEY
+    ), f"ck={repr(ck)} vs. PC88_COMBINED_KEY={repr(PC88_COMBINED_KEY)}"
     # Ensure every byte round-trips at offset zero, and also ensure a
     # few selected bytes round-trip at many different offsets (256 is
     # larger than the combined XOR key length, so this ensures there
@@ -985,7 +1029,7 @@ def analyze_disk(*, d88_data: bytes, disk_idx: int):
     assert (
         disk_sz > TRACK_TABLE_OFFSET + TRACK_ENTRY_SIZE
     ), f"Is this a D88 file? The disk size field is too small"
-    track_offsets = []
+    track_offsets: List[int] = []
     i = 0
     while True:
         if i > 0 and (TRACK_TABLE_OFFSET + TRACK_ENTRY_SIZE * i) >= min(track_offsets):
@@ -1044,7 +1088,7 @@ def start_log() -> Logger:
 
 def log_disk_information(*, disk_info: DiskInfo, logger: Logger):
     logger.append(f"\n== Disk Information{disk_info.disk_suffix} ==")
-    logger.append(f"Disk name/comment: {disk_info.disk_name_or_comment}")
+    logger.append(f"Disk name/comment: {repr(disk_info.disk_name_or_comment)}")
     logger.append(f"Disk attributes: {', '.join(sorted(disk_info.disk_attrs)) or None}")
     logger.append(f"Disk size: {disk_info.disk_sz}")
 
@@ -1192,7 +1236,6 @@ def analyze_tracks_and_sectors(*, d88_data: bytes, disk_info: DiskInfo, logger: 
 
 
 FAT8_FINAL_CLUSTER_OFFSET = 0xC0
-FAT8_RESERVED_CLUSTERS = 0x01
 FAT8_MAX_CLUSTERS = 0xA0
 FAT8_CHAIN_TERMINAL_LINK = 0xFE
 FAT8_UNALLOCATED_CLUSTER = 0xFF
@@ -1215,8 +1258,8 @@ class FAT8Info(NamedTuple):
     fat8_sector_shift: int
     fat8_first_metadata_cluster: int
     fat8_8bit_charset: str
-    decode_8bit_charset: Callable[[bytes], str]
-    encode_8bit_charset: Callable[[str], bytes]
+    decode_8bit_charset: Callable[..., str]
+    encode_8bit_charset: Callable[..., bytes]
     fat8_obfuscation: Optional[str]
     deobfuscate_byte: Callable[[int, int], int]
     obfuscate_byte: Callable[[int, int], int]
@@ -1237,16 +1280,12 @@ def make_fat8_info(**kw) -> FAT8Info:
 
 
 def guess_fat8_format_heuristics(*, track_and_sector_info: TrackAndSectorInfo):
-    boot_sector = (
-        [
-            sector_info.sector_data
-            for sector_info in track_and_sector_info.track_sector_map.get(
-                make_track_and_side(track=0, side=0), []
-            )
-            if sector_info.sec_num == 1
-        ][:1]
-        or [None]
-    )[0]
+    boot_sector = None
+    for sector_info in track_and_sector_info.track_sector_map.get(
+        make_track_and_side(track=0, side=0), []
+    ):
+        if sector_info.sec_num == 1:
+            boot_sector = sector_info.sector_data
     is_pc66sr_rxr = boot_sector is not None and (
         boot_sector.startswith(b"RXR") or boot_sector.startswith(b"IPL")
     )
@@ -1328,7 +1367,7 @@ def guess_fat8_format_heuristics(*, track_and_sector_info: TrackAndSectorInfo):
     )
     metadata_side = fat8_first_metadata_cluster // fat8_clusters_per_track % fat8_sides
 
-    fat8_format_name = f'Unknown format [{"Pasopia" if side_is_cluster_lsb else "PC-6001 mkII SR/6601 SR" if is_pc66sr_rxr else "N60/PC-6001/mkII/6601" if (is_pc66_sys or fat8_sides == 1) else "PC98" if is_pc98_sys else "N80/PC88"}-like {fat8_sides}-sided {track_and_sector_info.found_tracks}-track {fat8_sectors_per_track}-sectored (physical {track_and_sector_info.found_sectors}-sectored) with {len(boot_sector)}-byte boot sector beginning with {repr(boot_sector[:4])} (largest physical sector is {track_and_sector_info.largest_sector_size} bytes) with metadata in track {metadata_track} on side {metadata_side} and {fat8_clusters_per_track} clusters per track]'
+    fat8_format_name = f'Unknown format [{"Pasopia" if side_is_cluster_lsb else "PC-6001 mkII SR/6601 SR" if is_pc66sr_rxr else "N60/PC-6001/mkII/6601" if (is_pc66_sys or fat8_sides == 1) else "PC98" if is_pc98_sys else "N80/PC88"}-like {fat8_sides}-sided {track_and_sector_info.found_tracks}-track {fat8_sectors_per_track}-sectored (physical {track_and_sector_info.found_sectors}-sectored) with {len(boot_sector) if boot_sector is not None else "???"}-byte boot sector beginning with {repr(boot_sector[:4]) if boot_sector is not None else None} (largest physical sector is {track_and_sector_info.largest_sector_size} bytes) with metadata in track {metadata_track} on side {metadata_side} and {fat8_clusters_per_track} clusters per track]'
     return make_fat8_info(
         boot_sector=boot_sector,
         is_pc66sr_rxr=is_pc66sr_rxr,
@@ -1375,7 +1414,7 @@ def check_known_fat8_formats(
             for hint in known_format.sector1_start_hints
             if fat8_info.boot_sector is not None and hint(fat8_info.boot_sector)
         )
-        if guessed_format is None or known_format_score > guessed_format_score:
+        if guessed_format_score is None or known_format_score > guessed_format_score:
             guessed_format, guessed_format_score = known_format, known_format_score
     if guessed_format is None:
         return fat8_info
@@ -1604,12 +1643,18 @@ ALL_ATTRS = {
 # caller of to_host_fs_name.
 
 HOST_FS_UNSAFE_CHARS = set('"*+,/:;<=>?[\\]|\x7f¥¦') | set(chr(i) for i in range(0x20))
-HOST_FS_UNSAFE_NAMES_UPPER = set(
-    ["CLOCK$", "CON", "PRN", "AUX", "NUL"]
-    + [f"COM{n}" for n in range(1, 10)]
-    + [f"LPT{n}" for n in range(1, 10)]
+HOST_FS_UNSAFE_NAMES_UPPER = (
+    {
+        "CLOCK$",
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+    }
+    | {f"COM{n}" for n in range(1, 10)}
+    | {f"LPT{n}" for n in range(1, 10)}
 )
-HOST_FS_UNSAFE_START_CHARS = set(" ")
+HOST_FS_UNSAFE_START_CHARS = {" "}
 HOST_FS_UNSAFE_END_CHARS = set(" .")
 
 
@@ -1740,7 +1785,7 @@ def analyze_metadata_track(
     fat_sectors = {}
     autorun_data = None
     raw_metadata_sectors = {}
-    used_filenames = {}
+    used_filenames: Dict[str, DirectoryEntry] = {}
     used_lower_fs_names = set()
     end_of_directory = False
     for sec_num, offset, data, sectors_in_track in sorted(metadata_sectors):
@@ -1797,12 +1842,12 @@ def analyze_metadata_track(
                         # directory listing terminates at the first unused entry
                         end_of_directory = True
                         break
-                    used_lower_fs_names |= {host_fs_name.lower()}
+                    used_lower_fs_names.update({host_fs_name.lower()})
                     if (
                         ATTR_OBFUSCATED in fattrs
                         and fat8_info.fat8_obfuscation is not None
                     ):
-                        used_lower_fs_names |= {host_fs_deobf_name.lower()}
+                        used_lower_fs_names.update({host_fs_deobf_name.lower()})
                     parsed_entry = make_directory_entry(
                         idx=(vsec_num - 1) * 16 + i // 16 + 1,
                         host_fs_name=host_fs_name,
@@ -1820,9 +1865,9 @@ def analyze_metadata_track(
                     if PSEUDO_ATTR_DELETED not in fattrs:
                         other_entry = used_filenames.get(name + "." + ext)
                         if other_entry is not None:
-                            parsed_entry.errors |= {"Duplicate filename"}
+                            parsed_entry.errors.update({"Duplicate filename"})
                             if parsed_entry.raw_entry != other_entry.raw_entry:
-                                other_entry.errors |= {"Duplicate filename"}
+                                other_entry.errors.update({"Duplicate filename"})
                         else:
                             used_filenames[name + "." + ext] = parsed_entry
                     directory_entries.append(parsed_entry)
@@ -1903,12 +1948,17 @@ def hexdump_entry_data(file_data, fattrs, *, fat8_info: FAT8Info, logger: Logger
     )
 
 
-def log_boot_sector(*, fat8_info: FAT8Info, logger: Logger):
+def log_boot_sector(*, fat8_info: FAT8Info, logger: Logger) -> int:
+    error_count = 0
     if fat8_info.boot_sector is not None:
         logger.append(f"\n== Boot Sector (Track 0, Sector 1) =={'':22}╭{'─' * 16}╮")
         hexdump_entry_data(
             fat8_info.boot_sector, set(), fat8_info=fat8_info, logger=logger
         )
+    else:
+        logger.append(f"\n== No Boot Sector!!! ==")
+        error_count += 1
+    return error_count
 
 
 def log_raw_directory_sectors(
@@ -1917,7 +1967,8 @@ def log_raw_directory_sectors(
     metadata_indices: MetadataIndices,
     metadata_track_info: MetadataTrackInfo,
     logger: Logger,
-):
+) -> int:
+    error_count = 0
     logger.append("\n== Raw directory sectors ==")
     for vsec_num in sorted(metadata_indices.dir_sector_indices):
         sector_data = metadata_track_info.raw_metadata_sectors.get(vsec_num)
@@ -1933,6 +1984,8 @@ def log_raw_directory_sectors(
                 )
         else:
             logger.append(f"Missing directory sector {vsec_num:2}")
+            error_count += 1
+    return error_count
 
 
 def log_autorun_data(
@@ -1941,7 +1994,8 @@ def log_autorun_data(
     metadata_indices: MetadataIndices,
     metadata_track_info: MetadataTrackInfo,
     logger: Logger,
-):
+) -> int:
+    error_count = 0
     if metadata_track_info.autorun_data is not None:
         logger.append(
             f"\n== Autorun/ID Sector {metadata_indices.autorun_sector_index:2} =={'':33}╭{'─' * 16}╮"
@@ -1961,6 +2015,10 @@ def log_autorun_data(
         logger.append(
             f"Payload: {fat8_info.decode_8bit_charset(metadata_track_info.autorun_data[2:].rstrip(bytes([0x00])).rstrip(b' '))}"
         )
+    else:
+        logger.append(f"\n== No Autorun/ID Sector !!! ==")
+        error_count += 1
+    return error_count
 
 
 def check_fat_sectors(
@@ -2007,7 +2065,7 @@ def check_fat_sectors(
                     f"Unusable first FAT, it does not reserve cluster 0x{cluster_idx:02X} for metadata track"
                 )
                 usable_fat = False
-        for i in range(FAT8_RESERVED_CLUSTERS, fat8_info.fat8_total_clusters):
+        for i in range(0, fat8_info.fat8_total_clusters):
             if fat1[i] not in set(range(fat8_info.fat8_total_clusters)) | set(
                 range(
                     FAT8_FINAL_CLUSTER_OFFSET,
@@ -2054,49 +2112,46 @@ def check_fat_sectors(
 
 def analyze_fat_chains(
     *, fat8_info: FAT8Info, fat1, metadata_track_info: MetadataTrackInfo, logger: Logger
-):
+) -> int:
     if fat1 is not None:
         logger.append(f"\n== FAT Chain Analysis ==")
 
     # follow FAT chains
-    chained_blocks = {}
+    chained_blocks: Dict[int, DirectoryEntry] = {}
+    error_count = 0
     for offset_in_directory_entries, entry in enumerate(
         metadata_track_info.directory_entries
     ):
         chain = []
         errors = set()
         if fat1 is None:
-            errors |= {"No FAT"}
+            errors.update({"No FAT"})
         elif PSEUDO_ATTR_DELETED in entry.fattrs:
-            errors |= {"Deleted"}
+            continue
         elif PSEUDO_ATTR_UNUSED in entry.fattrs:
-            errors |= {"Unused"}
+            continue
         else:
             chain = [entry.cluster]
-            if entry.cluster < FAT8_RESERVED_CLUSTERS:
-                errors |= {"Reserved cluster at head of chain"}
-            elif entry.cluster >= FAT8_FINAL_CLUSTER_OFFSET and entry.cluster not in (
+            if entry.cluster >= FAT8_FINAL_CLUSTER_OFFSET and entry.cluster not in (
                 FAT8_CHAIN_TERMINAL_LINK,
                 FAT8_UNALLOCATED_CLUSTER,
             ):
-                errors |= {"Head of chain cannot be a block count"}
+                errors.update({"Head of chain cannot be a block count"})
             elif (
                 entry.cluster < FAT8_FINAL_CLUSTER_OFFSET
                 and entry.cluster >= fat8_info.fat8_total_clusters
             ):
-                errors |= {"Head of chain falls outside of disk"}
+                errors.update({"Head of chain falls outside of disk"})
             while chain[-1] < FAT8_FINAL_CLUSTER_OFFSET and not errors:
                 next_link = fat1[chain[-1]]
                 if next_link < FAT8_FINAL_CLUSTER_OFFSET:
-                    if next_link < FAT8_RESERVED_CLUSTERS:
-                        errors |= {"Reserved cluster in chain"}
-                    elif next_link >= fat8_info.fat8_total_clusters:
-                        errors |= {"Chain entry falls outside of disk"}
+                    if next_link >= fat8_info.fat8_total_clusters:
+                        errors.update({"Chain entry falls outside of disk"})
                     elif next_link in chain:
-                        errors |= {"Cycle in FAT chain"}
+                        errors.update({"Cycle in FAT chain"})
                 chain += [next_link]
             if (FAT8_UNALLOCATED_CLUSTER in chain) and not errors:
-                errors |= {"Unallocated cluster in FAT chain"}
+                errors.update({"Unallocated cluster in FAT chain"})
             if (
                 chain[-1] < FAT8_FINAL_CLUSTER_OFFSET
                 or chain[-1] == FAT8_UNALLOCATED_CLUSTER
@@ -2107,18 +2162,22 @@ def analyze_fat_chains(
                 > FAT8_FINAL_CLUSTER_OFFSET + fat8_info.fat8_sectors_per_cluster
                 and chain[-1] != FAT8_CHAIN_TERMINAL_LINK
             ) and not errors:
-                errors |= {
-                    "Sector count for final cluster exceeds sectors-per-cluster limit"
-                }
+                errors.update(
+                    {"Sector count for final cluster exceeds sectors-per-cluster limit"}
+                )
         if not errors:
             for link in chain[:-1]:
                 other_entry = chained_blocks.get(link)
                 if other_entry is not None:
                     if entry.raw_entry[9:11] != other_entry.raw_entry[9:11]:
-                        errors |= {f"Overlapping allocation {link:02X}"}
-                        other_entry.errors |= {f"Overlapping allocation {link:02X}"}
+                        errors.update({f"Overlapping allocation {link:02X}"})
+                        other_entry.errors.update(
+                            {f"Overlapping allocation {link:02X}"}
+                        )
                 else:
                     chained_blocks[link] = entry
+        else:
+            error_count += len(errors)
         allocated_size = entry.allocated_size
         if not errors:
             allocated_size = fat8_info.fat8_bytes_per_cluster * len(chain[:-1])
@@ -2147,6 +2206,7 @@ def analyze_fat_chains(
                 file_data=entry.file_data,
             )
         )
+    return error_count
 
 
 def quote_filename(filename):
@@ -2162,18 +2222,22 @@ def reconstruct_file_data(
     fat8_info: FAT8Info,
     metadata_track_info: MetadataTrackInfo,
     logger: Logger,
-):
-    # reconstructs file data while analyzing FAT chains
+) -> int:
+    """reconstructs file data while analyzing FAT chains"""
+    error_count = 0
     for idx, entry, offset_in_directory_entries in sorted(
         (ent.idx, ent, offset_in_directory_entries)
         for offset_in_directory_entries, ent in enumerate(
             metadata_track_info.directory_entries
         )
     ):
+        if PSEUDO_ATTR_DELETED in entry.fattrs:
+            continue
+        elif PSEUDO_ATTR_UNUSED in entry.fattrs:
+            continue
         chain = entry.chain
-        errors = entry.errors
         unlisted = True if UNLISTED_ENTRY_ATTRS.intersection(entry.fattrs) else False
-        if not errors:
+        if not entry.errors:
             sep = (
                 "*"
                 if ATTR_BINARY in entry.fattrs
@@ -2182,7 +2246,7 @@ def reconstruct_file_data(
             logger.append(
                 f"{entry.idx:3}. {'[' if unlisted else ' '}{entry.name}{sep}{entry.ext}{']' if unlisted else ' '} {(entry.allocated_size + fat8_info.fat8_bytes_per_cluster - 1) // fat8_info.fat8_bytes_per_cluster:3d} {quote_filename(entry.host_fs_name)+('' if ATTR_OBFUSCATED not in entry.fattrs or fat8_info.fat8_obfuscation is None else ', ' + quote_filename(entry.host_fs_deobf_name)):40} {'':8} ATTRS={entry.fattrs or None}  START={entry.cluster:02X} CHAIN={'→'.join(f'{cluster:02X}' for cluster in entry.chain) if entry.chain else None} STATUS={entry.errors or 'OK'}"
             )
-            file_data = b""
+            file_data: Optional[bytes] = b""
             final_cluster_offset = 0
             for i, cluster in enumerate(chain[:-1]):
                 if file_data is None:
@@ -2234,7 +2298,7 @@ def reconstruct_file_data(
                         fat8_info.fat8_sectors_per_track
                         // fat8_info.fat8_clusters_per_track
                     )
-                cluster_sectors: SectorInfo = (
+                cluster_sectors: List[SectorInfo] = (
                     track_and_sector_info.track_sector_map.get(
                         make_track_and_side(track=cluster_track, side=cluster_side), []
                     )
@@ -2301,7 +2365,7 @@ def reconstruct_file_data(
                         if cluster_sector_data is not None:
                             break
                     if cluster_sector_data is None:
-                        entry.errors |= {"Missing sector"}
+                        entry.errors.update({"Missing sector"})
                         if cluster_sector_list:
                             logger.append(
                                 f"{'':8}Cluster {cluster:02X}, Track {cluster_track:3}, Side {cluster_side}: "
@@ -2322,6 +2386,8 @@ def reconstruct_file_data(
                             f"{s[4]:2}:{len(s[5])}" for s in cluster_sector_list
                         )
                     )
+                else:
+                    error_count += 1
             metadata_track_info.directory_entries[offset_in_directory_entries] = (
                 make_directory_entry(
                     idx=entry.idx,
@@ -2338,6 +2404,7 @@ def reconstruct_file_data(
                     file_data=file_data,
                 )
             )
+    return error_count
 
 
 def log_directory_entries(
@@ -2368,6 +2435,10 @@ def log_file_contents(
         for idx, entry in sorted(
             (ent.idx, ent) for ent in metadata_track_info.directory_entries
         ):
+            if PSEUDO_ATTR_DELETED in entry.fattrs:
+                continue
+            elif PSEUDO_ATTR_UNUSED in entry.fattrs:
+                continue
             unlisted = (
                 True if UNLISTED_ENTRY_ATTRS.intersection(entry.fattrs) else False
             )
@@ -2475,7 +2546,7 @@ def extract_file_contents(
         (ent.idx, ent) for ent in metadata_track_info.directory_entries
     ):
         errors = entry.errors
-        if not errors:
+        if entry.file_data is not None and not errors:
             entry_filename = os.path.join(outdir, entry.host_fs_name)
             file_data = entry.file_data
             with open(entry_filename, "wb") as f:
@@ -2512,11 +2583,14 @@ def extract_everything(
     fat8_info: FAT8Info,
     metadata_indices: MetadataIndices,
     metadata_track_info: MetadataTrackInfo,
+    error_count: int,
     logger: Logger,
 ):
     outdir = (
         os.path.splitext(os.path.basename(d88_path))[0]
-        + f"{disk_info.disk_suffix} [FAT8 Contents]"
+        + f"{disk_info.disk_suffix}"
+        + (f" [Error count {error_count}]" if error_count else "")
+        + " [FAT8 Contents]"
     )
 
     disambig = ""
@@ -2544,12 +2618,13 @@ def extract_everything(
     extract_file_contents(
         outdir=outdir, fat8_info=fat8_info, metadata_track_info=metadata_track_info
     )
-    print(f"\nDone.{disk_info.disk_suffix}")
 
 
-def fat8_d88_tool(*, d88_path: str, d88_data: bytes, disk_idx: int = 1):
+def fat8_d88_tool(*, d88_path: str, d88_data: bytes, disk_idx: int = 1) -> int:
+    error_count = 0
     logger = start_log()
     disk_info = analyze_disk(d88_data=d88_data, disk_idx=disk_idx)
+    print(f"Processing disk{disk_info.disk_suffix}.")
     log_disk_information(disk_info=disk_info, logger=logger)
     track_and_sector_info = analyze_tracks_and_sectors(
         d88_data=d88_data, disk_info=disk_info, logger=logger
@@ -2568,14 +2643,14 @@ def fat8_d88_tool(*, d88_path: str, d88_data: bytes, disk_idx: int = 1):
         fat8_info=fat8_info,
         metadata_indices=metadata_indices,
     )
-    log_boot_sector(fat8_info=fat8_info, logger=logger)
-    log_raw_directory_sectors(
+    error_count += log_boot_sector(fat8_info=fat8_info, logger=logger)
+    error_count += log_raw_directory_sectors(
         fat8_info=fat8_info,
         metadata_indices=metadata_indices,
         metadata_track_info=metadata_track_info,
         logger=logger,
     )
-    log_autorun_data(
+    error_count += log_autorun_data(
         fat8_info=fat8_info,
         metadata_indices=metadata_indices,
         metadata_track_info=metadata_track_info,
@@ -2587,13 +2662,15 @@ def fat8_d88_tool(*, d88_path: str, d88_data: bytes, disk_idx: int = 1):
         metadata_track_info=metadata_track_info,
         logger=logger,
     )
-    analyze_fat_chains(
+    if fat1 is None:
+        error_count += 1
+    error_count += analyze_fat_chains(
         fat8_info=fat8_info,
         fat1=fat1,
         metadata_track_info=metadata_track_info,
         logger=logger,
     )
-    reconstruct_file_data(
+    error_count += reconstruct_file_data(
         track_and_sector_info=track_and_sector_info,
         fat8_info=fat8_info,
         metadata_track_info=metadata_track_info,
@@ -2608,20 +2685,24 @@ def fat8_d88_tool(*, d88_path: str, d88_data: bytes, disk_idx: int = 1):
         metadata_track_info=metadata_track_info,
         logger=logger,
     )
+    logger.append(f"\nDisk error count{disk_info.disk_suffix}: {error_count} error(s)")
     extract_everything(
         disk_info=disk_info,
         d88_path=d88_path,
         fat8_info=fat8_info,
         metadata_indices=metadata_indices,
         metadata_track_info=metadata_track_info,
+        error_count=error_count,
         logger=logger,
     )
+    print(f"\nFinished processing disk{disk_info.disk_suffix}: {error_count} error(s)")
     if len(d88_data) > disk_info.disk_sz:
-        fat8_d88_tool(
+        error_count += fat8_d88_tool(
             d88_path=d88_path,
             d88_data=d88_data[disk_info.disk_sz :],
             disk_idx=disk_idx + 1,
         )
+    return error_count
 
 
 def smoke_test_everything():
@@ -2635,10 +2716,24 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python fat8_d88_tool.py <file.d88> [...]")
         sys.exit(1)
+    total_error_count = 0
+    print(f"Processing {len(sys.argv[1:])} D88 file(s).")
     for d88_path in sys.argv[1:]:
         with open(d88_path, "rb") as f:
             d88_data = f.read()
-            fat8_d88_tool(d88_path=d88_path, d88_data=d88_data)
+            print(f"Processing D88 file {d88_path}.")
+            try:
+                error_count = fat8_d88_tool(d88_path=d88_path, d88_data=d88_data)
+                print(
+                    f"Finished processing D88 file {d88_path}: {error_count} error(s)."
+                )
+            except Exception as ex:
+                error_count = 1
+                print(f"Uncaught exception while processing D88 file {d88_path}: {ex}.")
+            total_error_count += error_count
+    print(f"Finished processing all D88 files: {total_error_count} error(s).")
+    if total_error_count:
+        sys.exit(1)
 
 
 smoke_test_everything()  # do this at import time so a broken module
