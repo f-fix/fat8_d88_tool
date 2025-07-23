@@ -24,12 +24,15 @@ If an intended output directory name already exists, a suffix like ` (2)` will b
 
 `Binary` (i.e. BLOAD) extracted files will have a `.bin` extension added if they are not already `.bin` or `.cod` (case-insensitively)
 
-Special file attributes may result in additional extensions like `.r-1`, `.r-2`, `.r-3`, `.r-o` (Read-Only), `.vfy` (Read-after-Write), and/or , `.obf` (Obfuscated)
+Special file attributes may result in additional extensions like `.r-1`, `.r-2`, `.r-3`, `.r-o` (Read-Only), `.vfy` (Read-after-Write), and/or `.obf` (Obfuscated)
 
 For systems where the deobfuscation method is understood, an additional deobfuscated copy of the file will be created without the `.obf` suffix
 
 If an output file within the created output directory with the same intended name (compared case-insensitively) is already going to be created, a suffix like ` (2)` will be added before the file extension, where 2 is replaced by a number from 2 onward that is large enough to avoid existing files.
 
+Dumped filenames will also often have a version where the suffix is changed from e.g. `.XXX` to `_XXX_utf8_dump.txt` containing a copy of the data with all bytes transformed to Unicode. Whether this contains anything useful will depend on what data was in the original file, though.
+
+A log file for each disk image will be written to stdout and also to a file `_fat8_d88_output.txt` inside the created directory. Additional files beginning with `_` may be written for things like boot sectors, directory sectors, autorun/ID data, and FAT sectors.
 ## Character set filter modes:
 In character set filter modes, character set translation proceeds one line at a time from stdin to stdout.
 
