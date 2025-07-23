@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Callable, NamedTuple, List, Dict, Tuple, Optional, Set
 
+import argparse
 import codecs
 import os.path
 import sys
@@ -2712,8 +2713,56 @@ def smoke_test_everything():
 
 
 def main():
-    help_requested = sys.argv[1:] in (["-h"], ["-help"], ["--help"])
-    if sys.argv[1:] in (["--pc98-8bit-to-utf8"], ["-pc98-8bit-to-utf8"]):
+    parser = argparse.ArgumentParser(
+        prog="fat8_d88_tool.py",
+        description="FAT8 D88 disk image extraction tool with character set conversion utilities",
+    )
+
+    # Character set conversion options
+    parser.add_argument(
+        "--pc98-8bit-to-utf8",
+        action="store_true",
+        help="Convert PC-98 8-bit character data from stdin to UTF-8 on stdout",
+    )
+    parser.add_argument(
+        "--pc6001-8bit-to-utf8",
+        action="store_true",
+        help="Convert PC-6001 8-bit character data from stdin to UTF-8 on stdout",
+    )
+    parser.add_argument(
+        "--utf8-to-pc98-8bit",
+        action="store_true",
+        help="Convert UTF-8 character data from stdin to PC-98 8-bit on stdout",
+    )
+    parser.add_argument(
+        "--utf8-to-pc6001-8bit",
+        action="store_true",
+        help="Convert UTF-8 character data from stdin to PC-6001 8-bit on stdout",
+    )
+
+    # D88 files for disk image extraction
+    parser.add_argument(
+        "d88_files",
+        nargs="*",
+        help="D88 disk image files to process (use '-' for stdin)",
+    )
+
+    args = parser.parse_args()
+
+    # Check for character set conversion modes
+    conversion_modes = [
+        args.pc98_8bit_to_utf8,
+        args.pc6001_8bit_to_utf8,
+        args.utf8_to_pc98_8bit,
+        args.utf8_to_pc6001_8bit,
+    ]
+
+    if sum(conversion_modes) > 1:
+        parser.error(
+            "Only one character set conversion mode can be specified at a time"
+        )
+
+    if args.pc98_8bit_to_utf8:
         while True:
             byts = sys.stdin.buffer.readline()
             if byts == b"":
@@ -2723,7 +2772,7 @@ def main():
             )
             sys.stdout.buffer.flush()
         sys.exit(0)
-    elif sys.argv[1:] in (["--pc6001-8bit-to-utf8"], ["-pc6001-8bit-to-utf8"]):
+    elif args.pc6001_8bit_to_utf8:
         while True:
             byts = sys.stdin.buffer.readline()
             if byts == b"":
@@ -2735,7 +2784,7 @@ def main():
             )
             sys.stdout.buffer.flush()
         sys.exit(0)
-    elif sys.argv[1:] in (["--utf8-to-pc98-8bit"], ["-utf8-to-pc98-8bit"]):
+    elif args.utf8_to_pc98_8bit:
         while True:
             byts = sys.stdin.buffer.readline()
             if byts == b"":
@@ -2744,7 +2793,7 @@ def main():
             sys.stdout.buffer.write(encode_pc98_8bit_charset(s, try_harder=True))
             sys.stdout.buffer.flush()
         sys.exit(0)
-    elif sys.argv[1:] in (["--utf8-to-pc6001-8bit"], ["-utf8-to-pc6001-8bit"]):
+    elif args.utf8_to_pc6001_8bit:
         while True:
             byts = sys.stdin.buffer.readline()
             if byts == b"":
@@ -2753,33 +2802,11 @@ def main():
             sys.stdout.buffer.write(encode_pc6001_8bit_charset(s, try_harder=True))
             sys.stdout.buffer.flush()
         sys.exit(0)
-    elif (
-        len(sys.argv) < 2
-        or (sys.argv[1].startswith("-") and sys.argv[1] != "-")
-        or help_requested
-    ):
-        progname = os.path.basename("".join((sys.argv + ["fat8_d88_tool.py"])[:1]))
-        print("# Help")
-        print("```")
-        print(f"Usage: python {progname} PATH/TO/MY/DISK.D88 [...]")
-        print(f"              {' ' * len(progname)} ## Disk image extraction mode")
-        print(
-            f"   or: python {progname} --pc98-8bit-to-utf8 < INPUT_PC98.TXT > OUTPUT_UTF8.TXT"
-        )
-        print(
-            f"       python {progname} --utf8-to-pc98-8bit < INPUT_UTF8.TXT > OUTPUT_PC98.TXT"
-        )
-        print(
-            f"       python {progname} --pc6001-8bit-to-utf8 < INPUT_PC6001.TXT > OUTPUT_UTF8.TXT"
-        )
-        print(
-            f"       python {progname} --utf8-to-pc6001-8bit < INPUT_UTF8.TXT > OUTPUT_PC6001.TXT"
-        )
-        print(f"              {' ' * len(progname)} ## Character set filter modes")
-        print(f"       python {progname} --help OR -h")
-        print(f"              {' ' * len(progname)} ## Display this message and exit")
-        print("```")
-        print("## Disk image extraction mode")
+
+    # If no character set conversion mode and no D88 files, show help
+    if not args.d88_files and not any(conversion_modes):
+        parser.print_help()
+        print("\n## Disk image extraction mode")
         print(
             "Each D88 file processed will have an output directory created in the current directory whose name beginning with `DISK [FAT8 Contents]`. The D88 filename `-` by itself indicates stdin, and in this case output will go to a directory named starting with `stdin [FAT8 Contents]`. A D88 file containing multiple disk images will have a suffix like ` [Disk 01]` appended to the directory name for each disk image, where 01 will be replaced by the index of the disk image within the D88 file. Processing errors result in a suffix like ` [Error Count 03]` appended to the directory name for the disk image, where 03 will be replaced by the number of processing errors."
         )
@@ -2823,10 +2850,12 @@ def main():
         print(
             "In character set filter modes, character set translation proceeds one line at a time from stdin to stdout."
         )
-        sys.exit(0 if help_requested else 1)
+        sys.exit(1)
+
+    # Process D88 files
     total_error_count = 0
-    print(f"Processing {len(sys.argv[1:])} D88 file(s).")
-    for d88_path in sys.argv[1:]:
+    print(f"Processing {len(args.d88_files)} D88 file(s).")
+    for d88_path in args.d88_files:
         with sys.stdin.buffer if d88_path == "-" else open(d88_path, "rb") as f:
             d88_data = f.read()
             if d88_path == "-":
