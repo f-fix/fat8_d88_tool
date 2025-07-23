@@ -2713,13 +2713,61 @@ def smoke_test_everything():
 
 
 def main():
-    if len(sys.argv) < 2:
+    if sys.argv[1:] in (["--pc98-8bit-to-utf8"], ["-pc98-8bit-to-utf8"]):
+        while True:
+            byts = sys.stdin.buffer.readline()
+            if byts == b"":
+                break
+            sys.stdout.buffer.write(
+                decode_pc98_8bit_charset(byts, preserve=ASCII_CONTROLS).encode("utf-8")
+            )
+            sys.stdout.buffer.flush()
+        sys.exit(0)
+    elif sys.argv[1:] in (["--pc6001-8bit-to-utf8"], ["-pc6001-8bit-to-utf8"]):
+        while True:
+            byts = sys.stdin.buffer.readline()
+            if byts == b"":
+                break
+            sys.stdout.buffer.write(
+                decode_pc6001_8bit_charset(byts, preserve=ASCII_CONTROLS).encode(
+                    "utf-8"
+                )
+            )
+            sys.stdout.buffer.flush()
+        sys.exit(0)
+    elif sys.argv[1:] in (["--utf8-to-pc98-8bit"], ["-utf8-to-pc98-8bit"]):
+        while True:
+            byts = sys.stdin.buffer.readline()
+            if byts == b"":
+                break
+            s = byts.decode("utf-8")
+            sys.stdout.buffer.write(encode_pc98_8bit_charset(s, try_harder=True))
+            sys.stdout.buffer.flush()
+        sys.exit(0)
+    elif sys.argv[1:] in (["--utf8-to-pc6001-8bit"], ["-utf8-to-pc6001-8bit"]):
+        while True:
+            byts = sys.stdin.buffer.readline()
+            if byts == b"":
+                break
+            s = byts.decode("utf-8")
+            sys.stdout.buffer.write(encode_pc6001_8bit_charset(s, try_harder=True))
+            sys.stdout.buffer.flush()
+        sys.exit(0)
+    elif len(sys.argv) < 2 or (sys.argv[1].startswith("-") and sys.argv[1] != "-"):
         print("Usage: python fat8_d88_tool.py <file.d88> [...]")
+        print("   or: python --pc98-8bit-to-utf8 < input-pc98.txt > output-utf8.txt")
+        print("   or: python --utf8-to-pc98-8bit < input-utf8.txt > output-pc98.txt")
+        print(
+            "   or: python --pc6001-8bit-to-utf8 < input-pc6001.txt > output-utf8.txt"
+        )
+        print(
+            "   or: python --utf8-to-pc6001-8bit < input-utf8.txt > output-pc6001.txt"
+        )
         sys.exit(1)
     total_error_count = 0
     print(f"Processing {len(sys.argv[1:])} D88 file(s).")
     for d88_path in sys.argv[1:]:
-        with open(d88_path, "rb") as f:
+        with sys.stdin.buffer if d88_path == "-" else open(d88_path, "rb") as f:
             d88_data = f.read()
             print(f"Processing D88 file {d88_path}.")
             try:
