@@ -1,6 +1,7 @@
 # fat8_d88_tool
 This tool extracts files from FAT8-formatted disks stored in the D88 image format.
-# Usage
+
+# Help
 ```
 Usage: python fat8_d88_tool.py PATH/TO/MY/DISK.D88 [...]
                                ## Disk image extraction mode
@@ -14,12 +15,19 @@ Usage: python fat8_d88_tool.py PATH/TO/MY/DISK.D88 [...]
 ```
 ## Disk image extraction mode
 Each D88 file processed will have an output directory created in the current directory whose name beginning with `DISK [FAT8 Contents]`. The D88 filename `-` by itself indicates stdin, and in this case output will go to a directory named starting with `stdin [FAT8 Contents]`. A D88 file containing multiple disk images will have a suffix like ` [Disk 01]` appended to the directory name for each disk image, where 01 will be replaced by the index of the disk image within the D88 file. Processing errors result in a suffix like ` [Error Count 03]` appended to the directory name for the disk image, where 03 will be replaced by the number of processing errors.
+
 If an intended output directory name already exists, a suffix like ` (2)` will be added, where 2 is a number from 2 onward that is large enough to avoid existing names.
+
 `Non-ASCII` (i.e. tokenized BASIC) extracted files will have a `.bas` extension added if they are not already `.bas`, `.n88`, `.nip`, or `.bin` (case-insensitively)
+
 `ASCII` (i.e. untokenized BASIC or regular character data) extracted files will have a `.asc` extension added if they are not already `.asc`, or `.txt` (case-insensitively)
+
 `Binary` (i.e. BLOAD) extracted files will have a `.bin` extension added if they are not already `.bin` or `.cod` (case-insensitively)
+
 Special file attributes may result in additional extensions like `.r-1`, `.r-2`, `.r-3`, `.r-o` (Read-Only), `.vfy` (Read-after-Write), and/or , `.obf` (Obfuscated)
+
 For systems where the deobfuscation method is understood, an additional deobfuscated copy of the file will be created without the `.obf` suffix
+
 If an output file within the created output directory with the same intended name (compared case-insensitively) is already going to be created, a suffix like ` (2)` will be added before the file extension, where 2 is replaced by a number from 2 onward that is large enough to avoid existing files.
 
 ## Character set filter modes:
