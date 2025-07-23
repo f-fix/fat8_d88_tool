@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 
-from pathlib import Path
-from typing import Callable, NamedTuple, List, Dict, Tuple, Optional, Set
-
 import argparse
-import codecs
 import os.path
 import sys
 import unicodedata
+from typing import Callable, Dict, List, NamedTuple, Optional, Set
 
 # FAT8 formatting schemes
 
