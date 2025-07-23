@@ -10,6 +10,16 @@ python3 fat_d88_tool.py PATH/TO/MY/DISK.D88
 
 A single D88 file may contain multiple images concatenated. You may also pass in multiple D88 files if you wish.
 
+## All the ways to use it
+```
+Usage: python fat8_d88_tool.py PATH/TO/MY/DISK.D88 [...]
+   or: python --pc98-8bit-to-utf8 < input-pc98.txt > output-utf8.txt
+   or: python --utf8-to-pc98-8bit < input-utf8.txt > output-pc98.txt
+   or: python --pc6001-8bit-to-utf8 < input-pc6001.txt > output-utf8.txt
+   or: python --utf8-to-pc6001-8bit < input-utf8.txt > output-pc6001.txt
+```
+In disk image mode, `-` by itself indicates the disk image comes from stdin.
+The character set filter modes do character set translation one line at a time from stdin to stdout.
 # Why?
 Why am I sharing it here when the code is terrible? In case you want to use it on a disk other tools won't touch.
 
