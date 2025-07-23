@@ -1063,7 +1063,9 @@ def analyze_disk(*, d88_data: bytes, disk_idx: int):
         disk_sz=disk_sz,
         track_offsets=track_offsets,
         disk_suffix=(
-            "" if disk_idx == 1 and len(d88_data) == disk_sz else f" #Disk{disk_idx:02}"
+            ""
+            if disk_idx == 1 and len(d88_data) == disk_sz
+            else f" [Disk {disk_idx:02}]"
         ),
     )
 
@@ -1686,38 +1688,35 @@ def to_host_fs_name(name, ext, fattrs, *, fat8_info: FAT8Info):
         host_fs_name = "(empty)" + host_fs_name
     natural_suffix = "".join(host_fs_name.split(".")[1:]).lower()
     host_fs_suffix = ".." + ".".join(
-        sorted(
-            sum(
-                [
-                    ["---"] if PSEUDO_ATTR_UNUSED in fattrs else [],
-                    (
-                        ["bas"]
-                        if ATTR_NON_ASCII in fattrs
-                        and natural_suffix not in ("bas", "n88", "nip", "hd")
-                        else []
-                    ),
-                    (
-                        ["bin"]
-                        if ATTR_BINARY in fattrs
-                        and natural_suffix not in ("bin", "cod")
-                        else []
-                    ),
-                    ["era"] if PSEUDO_ATTR_DELETED in fattrs else [],
-                    ["r-1"] if ATTR_1_RESERVED in fattrs else [],
-                    ["r-2"] if ATTR_2_RESERVED in fattrs else [],
-                    ["r-3"] if ATTR_3_RESERVED in fattrs else [],
-                    ["r-o"] if ATTR_READ_ONLY in fattrs else [],
-                    ["obf"] if ATTR_OBFUSCATED in fattrs else [],
-                    (
-                        ["asc"]
-                        if not {ATTR_NON_ASCII, ATTR_BINARY}.intersection(fattrs)
-                        and natural_suffix not in ("asc", "txt")
-                        else []
-                    ),
-                    ["vfy"] if ATTR_READ_AFTER_WRITE in fattrs else [],
-                ],
-                [],
-            )
+        sum(
+            [
+                ["---"] if PSEUDO_ATTR_UNUSED in fattrs else [],
+                ["vfy"] if ATTR_READ_AFTER_WRITE in fattrs else [],
+                ["r-1"] if ATTR_1_RESERVED in fattrs else [],
+                ["r-2"] if ATTR_2_RESERVED in fattrs else [],
+                ["r-3"] if ATTR_3_RESERVED in fattrs else [],
+                ["r-o"] if ATTR_READ_ONLY in fattrs else [],
+                (
+                    ["bas"]
+                    if ATTR_NON_ASCII in fattrs
+                    and natural_suffix not in ("bas", "n88", "nip", "hd")
+                    else []
+                ),
+                (
+                    ["bin"]
+                    if ATTR_BINARY in fattrs and natural_suffix not in ("bin", "cod")
+                    else []
+                ),
+                (
+                    ["asc"]
+                    if not {ATTR_NON_ASCII, ATTR_BINARY}.intersection(fattrs)
+                    and natural_suffix not in ("asc", "txt")
+                    else []
+                ),
+                ["era"] if PSEUDO_ATTR_DELETED in fattrs else [],
+                ["obf"] if ATTR_OBFUSCATED in fattrs else [],
+            ],
+            [],
         )
     )
     if host_fs_suffix == "..":
@@ -1826,7 +1825,7 @@ def analyze_metadata_track(
                         extend_name(host_fs_name.lower(), disambig)
                         in used_lower_fs_names
                     ):
-                        disambig = f" ({1 + int(disambig.strip(' ()') or 0)})"
+                        disambig = f" ({1 + int(disambig.strip(' ()') or 1)})"
                     host_fs_name = extend_name(host_fs_name, disambig)
                     host_fs_deobf_name = to_host_fs_name(
                         name, ext, fattrs - {ATTR_OBFUSCATED}, fat8_info=fat8_info
@@ -1836,7 +1835,7 @@ def analyze_metadata_track(
                         extend_name(host_fs_deobf_name.lower(), disambig_deobf)
                         in used_lower_fs_names
                     ):
-                        disambig_deobf = f" ({1 + int(disambig.strip(' ()') or 0)})"
+                        disambig_deobf = f" ({1 + int(disambig.strip(' ()') or 1)})"
                     host_fs_deobf_name = extend_name(host_fs_deobf_name, disambig_deobf)
                     if PSEUDO_ATTR_UNUSED in fattrs:
                         # directory listing terminates at the first unused entry
@@ -2588,9 +2587,9 @@ def extract_everything(
 ):
     outdir = (
         os.path.splitext(os.path.basename(d88_path))[0]
-        + f"{disk_info.disk_suffix}"
-        + (f" [Error count {error_count}]" if error_count else "")
         + " [FAT8 Contents]"
+        + f"{disk_info.disk_suffix}"
+        + (f" [Error Count {error_count:02}]" if error_count else "")
     )
 
     disambig = ""
@@ -2713,6 +2712,7 @@ def smoke_test_everything():
 
 
 def main():
+    help_requested = sys.argv[1:] in (["-h"], ["-help"], ["--help"])
     if sys.argv[1:] in (["--pc98-8bit-to-utf8"], ["-pc98-8bit-to-utf8"]):
         while True:
             byts = sys.stdin.buffer.readline()
@@ -2753,22 +2753,84 @@ def main():
             sys.stdout.buffer.write(encode_pc6001_8bit_charset(s, try_harder=True))
             sys.stdout.buffer.flush()
         sys.exit(0)
-    elif len(sys.argv) < 2 or (sys.argv[1].startswith("-") and sys.argv[1] != "-"):
-        print("Usage: python fat8_d88_tool.py <file.d88> [...]")
-        print("   or: python --pc98-8bit-to-utf8 < input-pc98.txt > output-utf8.txt")
-        print("   or: python --utf8-to-pc98-8bit < input-utf8.txt > output-pc98.txt")
+    elif (
+        len(sys.argv) < 2
+        or (sys.argv[1].startswith("-") and sys.argv[1] != "-")
+        or help_requested
+    ):
+        progname = os.path.basename("".join((sys.argv + ["fat8_d88_tool.py"])[:1]))
+        print("# Help")
+        print("```")
+        print(f"Usage: python {progname} PATH/TO/MY/DISK.D88 [...]")
+        print(f"              {' ' * len(progname)} ## Disk image extraction mode")
         print(
-            "   or: python --pc6001-8bit-to-utf8 < input-pc6001.txt > output-utf8.txt"
+            f"   or: python {progname} --pc98-8bit-to-utf8 < INPUT_PC98.TXT > OUTPUT_UTF8.TXT"
         )
         print(
-            "   or: python --utf8-to-pc6001-8bit < input-utf8.txt > output-pc6001.txt"
+            f"       python {progname} --utf8-to-pc98-8bit < INPUT_UTF8.TXT > OUTPUT_PC98.TXT"
         )
-        sys.exit(1)
+        print(
+            f"       python {progname} --pc6001-8bit-to-utf8 < INPUT_PC6001.TXT > OUTPUT_UTF8.TXT"
+        )
+        print(
+            f"       python {progname} --utf8-to-pc6001-8bit < INPUT_UTF8.TXT > OUTPUT_PC6001.TXT"
+        )
+        print(f"              {' ' * len(progname)} ## Character set filter modes")
+        print(f"       python {progname} --help OR -h")
+        print(f"              {' ' * len(progname)} ## Display this message and exit")
+        print("```")
+        print("## Disk image extraction mode")
+        print(
+            "Each D88 file processed will have an output directory created in the current directory whose name beginning with `DISK [FAT8 Contents]`. The D88 filename `-` by itself indicates stdin, and in this case output will go to a directory named starting with `stdin [FAT8 Contents]`. A D88 file containing multiple disk images will have a suffix like ` [Disk 01]` appended to the directory name for each disk image, where 01 will be replaced by the index of the disk image within the D88 file. Processing errors result in a suffix like ` [Error Count 03]` appended to the directory name for the disk image, where 03 will be replaced by the number of processing errors."
+        )
+        print("")
+        print(
+            "If an intended output directory name already exists, a suffix like ` (2)` will be added, where 2 is a number from 2 onward that is large enough to avoid existing names."
+        )
+        print("")
+        print(
+            "`Non-ASCII` (i.e. tokenized BASIC) extracted files will have a `.bas` extension added if they are not already `.bas`, `.n88`, `.nip`, or `.bin` (case-insensitively)"
+        )
+        print("")
+        print(
+            "`ASCII` (i.e. untokenized BASIC or regular character data) extracted files will have a `.asc` extension added if they are not already `.asc`, or `.txt` (case-insensitively)"
+        )
+        print("")
+        print(
+            "`Binary` (i.e. BLOAD) extracted files will have a `.bin` extension added if they are not already `.bin` or `.cod` (case-insensitively)"
+        )
+        print("")
+        print(
+            "Special file attributes may result in additional extensions like `.r-1`, `.r-2`, `.r-3`, `.r-o` (Read-Only), `.vfy` (Read-after-Write), and/or `.obf` (Obfuscated)"
+        )
+        print("")
+        print(
+            "For systems where the deobfuscation method is understood, an additional deobfuscated copy of the file will be created without the `.obf` suffix"
+        )
+        print("")
+        print(
+            "If an output file within the created output directory with the same intended name (compared case-insensitively) is already going to be created, a suffix like ` (2)` will be added before the file extension, where 2 is replaced by a number from 2 onward that is large enough to avoid existing files."
+        )
+        print("")
+        print(
+            "Dumped filenames will also often have a version where the suffix is changed from e.g. `.XXX` to `_XXX_utf8_dump.txt` containing a copy of the data with all bytes transformed to Unicode. Whether this contains anything useful will depend on what data was in the original file, though."
+        )
+        print("")
+        print(
+            "A log file for each disk image will be written to stdout and also to a file `_fat8_d88_output.txt` inside the created directory. Additional files beginning with `_` may be written for things like boot sectors, directory sectors, autorun/ID data, and FAT sectors."
+        )
+        print("## Character set filter modes:")
+        print(
+            "In character set filter modes, character set translation proceeds one line at a time from stdin to stdout."
+        )
+        sys.exit(0 if help_requested else 1)
     total_error_count = 0
     print(f"Processing {len(sys.argv[1:])} D88 file(s).")
     for d88_path in sys.argv[1:]:
         with sys.stdin.buffer if d88_path == "-" else open(d88_path, "rb") as f:
             d88_data = f.read()
+            if d88_path == "-":
+                d88_path = "stdin"
             print(f"Processing D88 file {d88_path}.")
             try:
                 error_count = fat8_d88_tool(d88_path=d88_path, d88_data=d88_data)
