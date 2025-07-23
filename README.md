@@ -3,7 +3,7 @@ This tool extracts files from FAT8-formatted disks stored in the D88 image forma
 # Usage
 ```
 Usage: python fat8_d88_tool.py PATH/TO/MY/DISK.D88 [...]
-                               # Disk image extraction mode
+                               ## Disk image extraction mode
    or: python fat8_d88_tool.py --pc98-8bit-to-utf8 < INPUT_PC98.TXT > OUTPUT_UTF8.TXT
        python fat8_d88_tool.py --utf8-to-pc98-8bit < INPUT_UTF8.TXT > OUTPUT_PC98.TXT
        python fat8_d88_tool.py --pc6001-8bit-to-utf8 < INPUT_PC6001.TXT > OUTPUT_UTF8.TXT
