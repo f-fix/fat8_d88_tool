@@ -7,17 +7,18 @@ import os.path
 import sys
 
 
-def best_line(current_best_line, prospective_best_line):
-    if (
+def best_line(current_best_line, prospective_best_line, opt_level):
+    if opt_level > 0 and (
         (len(prospective_best_line) < len(current_best_line))
-        or (len(current_best_line) == len(prospective_best_line))
+        or (opt_level & 1 == 1)
+        and (len(current_best_line) == len(prospective_best_line))
         and current_best_line[0] == 0x00
     ):
         return prospective_best_line
     return current_best_line
 
 
-def opt_line(line):
+def opt_line(line, opt_level):
     opt_line = line
     opt_line_40 = b"\x40"  # CMD_REPEATED_BLOCKS_UNTIL_FF
     i = 1
@@ -28,11 +29,11 @@ def opt_line(line):
         if i == len(line):
             repeat = 0xFF
         opt_line_40 += data_byte + bytes([repeat])
-    opt_line = best_line(opt_line, opt_line_40)
+    opt_line = best_line(opt_line, opt_line_40, opt_level)
     return opt_line
 
 
-def opt_line_y_offset(line, y_offset, previous_line, opt_line):
+def opt_line_y_offset(line, y_offset, previous_line, opt_line, opt_level):
     assert len(line) == len(previous_line)
     assert line[0] == 0x00 and previous_line[0] == 0x00
     if line == previous_line:
@@ -49,7 +50,7 @@ def opt_line_y_offset(line, y_offset, previous_line, opt_line):
         draw_opt_line += bytes([count, line[i]])
         i += 1
     draw_opt_line += bytes([0xFF])
-    opt_line = best_line(opt_line, draw_opt_line)
+    opt_line = best_line(opt_line, draw_opt_line, opt_level)
     if (
         line[1 + ((len(line) - 1) // 8) * 8 :]
         == previous_line[1 + ((len(line) - 1) // 8) * 8 :]
@@ -65,7 +66,7 @@ def opt_line_y_offset(line, y_offset, previous_line, opt_line):
                     skip_masks[line_region] |= 1
                     skip_data.append(line[1 + x])
         skip_opt_line += bytes(skip_masks + skip_data)
-        opt_line = best_line(opt_line, skip_opt_line)
+        opt_line = best_line(opt_line, skip_opt_line, opt_level)
     draw2_opt_line = bytes(
         [0xB0 | y_offset]
     )  # CMD_MIXED_COPY_PREVIOUS_LINE_AND_LITERAL_PIXEL_DATA
@@ -90,23 +91,25 @@ def opt_line_y_offset(line, y_offset, previous_line, opt_line):
         if i == len(line):
             count2 = 0xFF
         draw2_opt_line += bytes([count2] + px2)
-    opt_line = best_line(opt_line, draw2_opt_line)
+    opt_line = best_line(opt_line, draw2_opt_line, opt_level)
     return opt_line
 
 
-def opt_frame(frame):
+def opt_frame(frame, opt_level):
     opt_frame = []
     for y, line in enumerate(frame):
         next_opt_line = line
-        for y_offset in range(1, 4 + 1):
+        for y_offset in range(
+            1, (min((opt_level - 1) >> 1, 15) if opt_level > 2 else 0) + 1
+        ):
             if y - y_offset < 0:
                 continue
             next_opt_line_y_offset = opt_line_y_offset(
-                line, y_offset, frame[y - y_offset], next_opt_line
+                line, y_offset, frame[y - y_offset], next_opt_line, opt_level
             )
-            next_opt_line = best_line(next_opt_line, next_opt_line_y_offset)
-        simple_opt_line = opt_line(line)
-        next_opt_line = best_line(next_opt_line, simple_opt_line)
+            next_opt_line = best_line(next_opt_line, next_opt_line_y_offset, opt_level)
+        simple_opt_line = opt_line(line, opt_level)
+        next_opt_line = best_line(next_opt_line, simple_opt_line, opt_level)
         opt_frame.append(next_opt_line)
     return opt_frame
 
@@ -127,7 +130,7 @@ STIPPLES = [
 ]
 
 
-def encode_rbyte(*, image):
+def encode_rbyte(*, image, opt_level):
     if image.width > 640 or image.height > 400:
         scale = min(640 / image.width, 400 / image.height)
         image = image.resize((int(image.width * scale), int(image.height * scale)))
@@ -167,14 +170,15 @@ def encode_rbyte(*, image):
                 row += bytes([b])
             frame.append(b"\x00" + row)  # CMD_LITERAL_PIXEL_LINE
         byts += b"".join(frame)
-        opt_byts += b"".join(opt_frame(frame))
-    print(
-        dict(
-            compressed_savings_percent=round(
-                100 * (len(byts) - len(opt_byts)) / len(byts)
+        opt_byts += b"".join(opt_frame(frame, opt_level))
+    if byts != opt_byts:
+        print(
+            dict(
+                compressed_savings_percent=round(
+                    100 * (len(byts) - len(opt_byts)) / len(byts)
+                )
             )
         )
-    )
     return opt_byts
 
 
@@ -183,7 +187,23 @@ def encode_bload(*, start_address, data):
 
 
 def main():
-    _, image_file_name = sys.argv  # usage: python rbyte_enc.py INPUT.PNG
+    try:
+        try:
+            _, opt_, level_, image_file_name = sys.argv
+            assert opt_ == "-O"
+            opt_level = opt_ + level_
+        except:
+            _, opt_level, image_file_name = sys.argv
+        assert opt_level.startswith("-O")
+    except:
+        opt_level = "-O9"
+        _, image_file_name = (
+            sys.argv
+        )  # usage: python rbyte_enc.py [ -OOPTLEVEL ] INPUT.PNG
+    opt_level = int(  # -O9 is the default; -O0 through -O32 are meaningful
+        opt_level[len("-O") :]
+    )
+    assert opt_level >= 0  # -O0 is the minimum, -O32 is the maximum useful value
     with Image.open(image_file_name) as im:
         if im.mode.startswith("I;16"):
             # PIL conversion to RGB is broken for I;16* formats!
@@ -202,9 +222,8 @@ def main():
             "removed previous %(output_file_name)s"
             % dict(output_file_name=output_file_name)
         )
-    output_bytes = encode_bload(
-        start_address=0x1000, data=encode_rbyte(image=rgb_image)
-    )
+    rbyte_data = encode_rbyte(image=rgb_image, opt_level=opt_level)
+    output_bytes = encode_bload(start_address=0x1000, data=rbyte_data)
     open(output_file_name, "wb").write(output_bytes)
     print(f"saved {output_file_name}")
 
