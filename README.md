@@ -1,5 +1,5 @@
 # fat8_d88_tool
-This tool extracts files from FAT8-formatted disks stored in the D88 image format. An encoder and decoder for the `RBYTE` image format found on some PC98 D88 disks is also included. A decoder for the `RBYTE` image format found on some PC88 D88 disks is also included. For now those RBYTE tools must be invoked separately.
+This tool extracts files from FAT8-formatted disks stored in the D88 image format. Encoders and decoders for the `RBYTE` image formats found on some PC98 and PC88 D88 disks are also included. For now those RBYTE tools must be invoked separately, refer to the corresponding file for more information.
 
 # Help
 ```
