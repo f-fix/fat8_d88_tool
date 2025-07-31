@@ -215,20 +215,28 @@ def decode_rbyte88_data(rbyte_data, x_offset=None, y_offset=None):
     decoded_rbyte_data = b""
     previous_data_bytes = b""
     extra_bytes = b""
-    i_sz, j_sz = (rbyte_image_height, rbyte_image_width) if rbyte_image_vertical else (rbyte_image_width, rbyte_image_height)
+    i_sz, j_sz = (
+        (rbyte_image_height, rbyte_image_width)
+        if rbyte_image_vertical
+        else (rbyte_image_width, rbyte_image_height)
+    )
     i, j = (0, 0)
-    i_nm, j_nm = ('y', 'x') if rbyte_image_vertical else ('x', 'y')
+    i_nm, j_nm = ("y", "x") if rbyte_image_vertical else ("x", "y")
     c = 0
     for data_byte in rbyte_data[RBYTE88_HEADER_SIZE:]:
         if len(decoded_rbyte_data) == 3 * rbyte_image_width * rbyte_image_height:
             if extra_bytes == b"":
-                assert data_byte == 0x1A, "Extra bytes at end of RBYTE data must begin with Ctrl-Z (EOF)"
+                assert (
+                    data_byte == 0x1A
+                ), "Extra bytes at end of RBYTE data must begin with Ctrl-Z (EOF)"
             extra_bytes += bytes([data_byte])
             assert (
                 len(extra_bytes) <= 2 * FAT8_SECTOR_SIZE
             ), f"RBYTE data must be followed by at most 2*{FAT8_SECTOR_SIZE} bytes of sector padding {extra_bytes}"
             continue
-        assert len(decoded_rbyte_data) <= 3 * rbyte_image_width * rbyte_image_height, "Decoded data is too large"
+        assert (
+            len(decoded_rbyte_data) <= 3 * rbyte_image_width * rbyte_image_height
+        ), "Decoded data is too large"
         if (
             (previous_data_bytes == b"")
             or len(previous_data_bytes) == 1
@@ -250,57 +258,62 @@ def decode_rbyte88_data(rbyte_data, x_offset=None, y_offset=None):
         else:
             assert False, "This code should not be reachable."
         if i >= i_sz:
-            #assert i == i_sz, f"Strip overflow at {('plane', c, i_nm, i, i_sz, j_nm, j, j_sz)}"
+            # assert i == i_sz, f"Strip overflow at {('plane', c, i_nm, i, i_sz, j_nm, j, j_sz)}"
             j += i // i_sz
             i %= i_sz
         if j >= j_sz:
-            assert j == j_sz, f"Plane overflow at {('plane', c, i_nm, i, i_sz, j_nm, j, j_sz)}"
+            assert (
+                j == j_sz
+            ), f"Plane overflow at {('plane', c, i_nm, i, i_sz, j_nm, j, j_sz)}"
             c += j // j_sz
             j %= j_sz
             previous_data_bytes = b""
-        assert c <= 2 or ((c, i, j) == (3, 0, 0)), f"Image overflow at {('plane', c, i_nm, i, i_sz, j_nm, j, j_sz)}"
+        assert c <= 2 or (
+            (c, i, j) == (3, 0, 0)
+        ), f"Image overflow at {('plane', c, i_nm, i, i_sz, j_nm, j, j_sz)}"
     if extra_bytes:
         assert (
             len(rbyte_data) % FAT8_SECTOR_SIZE == 0
         ), f"When padded, the length of the RBYTE data must be a multiple of {FAT8_SECTOR_SIZE}"
-    if False: assert (
-        len(decoded_rbyte_data) == 3 * rbyte_image_width * rbyte_image_height
-    ), "RBYTE data must contain exactly three pixel planes"
+    if False:
+        assert (
+            len(decoded_rbyte_data) == 3 * rbyte_image_width * rbyte_image_height
+        ), "RBYTE data must contain exactly three pixel planes"
     decoded_rbyte_data_offset = 0
     for color_channel in (2, 0, 1):
-      try:
-        if RBYTE88_VERBOSE_DEBUGGING:
-            print(dict(color_channel=color_channel))
-        y_range = range(y_offset, y_offset + rbyte_image_height)
-        x_range = range(x_offset, x_offset + rbyte_image_width)
-        i_range, j_range = (
-            (y_range, x_range) if rbyte_image_vertical else (x_range, y_range)
-        )
-        for j in j_range:
+        try:
             if RBYTE88_VERBOSE_DEBUGGING:
-                print(dict(color_channel=color_channel, j=j))
-            for i in i_range:
-                x, y = (j, i) if rbyte_image_vertical else (i, j)
+                print(dict(color_channel=color_channel))
+            y_range = range(y_offset, y_offset + rbyte_image_height)
+            x_range = range(x_offset, x_offset + rbyte_image_width)
+            i_range, j_range = (
+                (y_range, x_range) if rbyte_image_vertical else (x_range, y_range)
+            )
+            for j in j_range:
                 if RBYTE88_VERBOSE_DEBUGGING:
-                    print(dict(color_channel=color_channel, y=y, x=x))
-                data_byte, decoded_rbyte_data_offset = (
-                    decoded_rbyte_data[decoded_rbyte_data_offset],
-                    1 + decoded_rbyte_data_offset,
-                )
-                draw_pixel_byte(
-                    decoded_image,
-                    color_channel,
-                    x,
-                    y,
-                    data_byte,
-                    x_offset,
-                    y_offset,
-                    rbyte_image_width,
-                    rbyte_image_height,
-                )
-      except:
-          decoded_image.show()
-          raise
+                    print(dict(color_channel=color_channel, j=j))
+                for i in i_range:
+                    x, y = (j, i) if rbyte_image_vertical else (i, j)
+                    if RBYTE88_VERBOSE_DEBUGGING:
+                        print(dict(color_channel=color_channel, y=y, x=x))
+                    data_byte, decoded_rbyte_data_offset = (
+                        decoded_rbyte_data[decoded_rbyte_data_offset],
+                        1 + decoded_rbyte_data_offset,
+                    )
+                    draw_pixel_byte(
+                        decoded_image,
+                        color_channel,
+                        x,
+                        y,
+                        data_byte,
+                        x_offset,
+                        y_offset,
+                        rbyte_image_width,
+                        rbyte_image_height,
+                    )
+        except:
+            decoded_image.show()
+            raise
     return decoded_image
 
 
@@ -309,7 +322,7 @@ def rbyte88_main():
         _, rbyte88_data_file_name = sys.argv
         x_offset, y_offset = None, None
     except ValueError:
-        (  # usage: python rbyte88.py RBYTE88_FILE [ X-OFFSET (in bytes, i.e. eight-pixel groups) Y-OFFSET (in lines) ]  # generates RBYTE88_FILE_[X-OFFSET_Y-OFFSET_]rbyte.png in the current directory
+        (  # usage: python rbyte88.py RBYTE88_FILE [ X-OFFSET (in bytes, i.e. eight-pixel groups) Y-OFFSET (in lines) ]  # generates RBYTE88_FILE_[X-OFFSET_Y-OFFSET_]rbyte88.png in the current directory
             _,
             rbyte88_data_file_name,
             x_offset,
@@ -317,11 +330,11 @@ def rbyte88_main():
         ) = sys.argv
         x_offset, y_offset = int(x_offset), int(y_offset)
     if x_offset is None and y_offset is None:
-        output_file_name = rbyte88_data_file_name + "_rbyte.png"
+        output_file_name = rbyte88_data_file_name + "_rbyte88.png"
     else:
         output_file_name = (
             rbyte88_data_file_name
-            + "_%(x_offset)d_%(y_offset)d_rbyte.png"
+            + "_%(x_offset)d_%(y_offset)d_rbyte88.png"
             % dict(x_offset=x_offset, y_offset=y_offset)
         )
     output_file_name = os.path.basename(output_file_name)
