@@ -852,7 +852,7 @@ def decode_rbyte_data(rbyte_data, x_offset=None, y_offset=None):
     return decoded_image
 
 
-FAT8_SECTOR_SIZE = 512
+FAT8_SECTOR_SIZE = 256
 BLOAD_HEADER_SIZE = 4
 
 
@@ -876,7 +876,7 @@ def decode_rbyte_bload_data(rbyte_bload_data):
     ]
     trailing_data = rbyte_bload_data[BLOAD_HEADER_SIZE + rbyte_data_length :]
     assert (
-        len(trailing_data) <= FAT8_SECTOR_SIZE
+        len(trailing_data) <= 2 * FAT8_SECTOR_SIZE
     ), "Extra FAT8 sectors found at end of BLOAD data %(info)r" % dict(
         info=dict(
             trailing_data=trailing_data,
@@ -891,6 +891,9 @@ def decode_rbyte_bload_data(rbyte_bload_data):
         assert (
             trailing_data[:1] == b"\x1a"
         ), "Extra bytes at end of BLOAD data must begin with Ctrl-Z (EOF)"
+        assert (
+            len(rbyte_bload_data) % FAT8_SECTOR_SIZE == 0
+        ), f"When padded, the length of the BLOAD data must be a multiple of {FAT8_SECTOR_SIZE}"
     return rbyte_data
 
 
@@ -899,9 +902,12 @@ def rbyte_main():
         _, rbyte_bload_data_file_name = sys.argv
         x_offset, y_offset = None, None
     except ValueError:
-        _, rbyte_bload_data_file_name, x_offset, y_offset = (
-            sys.argv
-        )  # usage: python rbyte.py RBYTE_FILE [ X-OFFSET (in bytes, i.e. eight-pixel groups) Y-OFFSET (in lines) ]  # generates RBYTE_FILE_[X-OFFSET_Y-OFFSET_]rbyte.png
+        (  # usage: python rbyte.py RBYTE_FILE [ X-OFFSET (in bytes, i.e. eight-pixel groups) Y-OFFSET (in lines) ]  # generates RBYTE_FILE_[X-OFFSET_Y-OFFSET_]rbyte.png in the current directory
+            _,
+            rbyte_bload_data_file_name,
+            x_offset,
+            y_offset,
+        ) = sys.argv
         x_offset, y_offset = int(x_offset), int(y_offset)
     if x_offset is None and y_offset is None:
         output_file_name = rbyte_bload_data_file_name + "_rbyte.png"
@@ -911,6 +917,7 @@ def rbyte_main():
             + "_%(x_offset)d_%(y_offset)d_rbyte.png"
             % dict(x_offset=x_offset, y_offset=y_offset)
         )
+    output_file_name = os.path.basename(output_file_name)
     if os.path.lexists(output_file_name):
         os.remove(output_file_name)
         print(
