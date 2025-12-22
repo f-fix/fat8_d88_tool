@@ -1833,7 +1833,7 @@ def analyze_metadata_track(
                         extend_name(host_fs_deobf_name.lower(), disambig_deobf)
                         in used_lower_fs_names
                     ):
-                        disambig_deobf = f" ({1 + int(disambig.strip(' ()') or 1)})"
+                        disambig_deobf = f" ({1 + int(disambig_deobf.strip(' ()') or 1)})"
                     host_fs_deobf_name = extend_name(host_fs_deobf_name, disambig_deobf)
                     if PSEUDO_ATTR_UNUSED in fattrs:
                         # directory listing terminates at the first unused entry
