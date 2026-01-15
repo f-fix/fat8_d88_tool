@@ -273,6 +273,16 @@ PC98_8BIT_CHARMAP_COMPAT = {
     unicodedata.normalize("NFKD", key): value
     for key, value in PC98_8BIT_CHARMAP.items()
     if unicodedata.normalize("NFKD", key) != key
+} | {
+    "\N{KATAKANA-HIRAGANA VOICED SOUND MARK}": PC98_8BIT_CHARMAP[
+        "\N{HALFWIDTH KATAKANA VOICED SOUND MARK}"
+    ],
+    "\N{KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK}": PC98_8BIT_CHARMAP[
+        "\N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}"
+    ],
+    "\N{KATAKANA-HIRAGANA PROLONGED SOUND MARK}": PC98_8BIT_CHARMAP[
+        "\N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}"
+    ],
 }
 
 
@@ -499,6 +509,21 @@ def smoke_test_pc98_8bit_charset():
         decode_pc98_8bit_charset(bytes([i for i in range(256)]), preserve=NO_CONTROLS)
         == PC98_8BIT_CHARSET
     ), f"decode_pc98_8bit_charset(bytes([i for i in range(256)]), preserve=NO_CONTROLS) returned:\n {repr(decode_pc98_8bit_charset(bytes([i for i in range(256)])), preserve=NO_CONTROLS)}, expecting:\n {repr(PC98_8BIT_CHARSET)}"
+    sound_mark_tests = {
+        "[\N{COMBINING KATAKANA-HIRAGANA VOICED SOUND MARK}] = \N{COMBINING KATAKANA-HIRAGANA VOICED SOUND MARK}": "[\N{HALFWIDTH KATAKANA VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA VOICED SOUND MARK}",
+        "[\N{COMBINING KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK}] = \N{COMBINING KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK}": "[\N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}",
+        "[\N{KATAKANA-HIRAGANA VOICED SOUND MARK}] = \N{KATAKANA-HIRAGANA VOICED SOUND MARK}": "[\N{HALFWIDTH KATAKANA VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA VOICED SOUND MARK}",
+        "[\N{KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK}] = \N{KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK}": "[\N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}",
+        "[\N{KATAKANA-HIRAGANA PROLONGED SOUND MARK}] = \N{KATAKANA-HIRAGANA PROLONGED SOUND MARK}": "[\N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}] = \N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}",
+        "[\N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}] = \N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}": "[\N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}] = \N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}",
+        "[\N{HALFWIDTH KATAKANA VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA VOICED SOUND MARK}": "[\N{HALFWIDTH KATAKANA VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA VOICED SOUND MARK}",
+        "[\N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}": "[\N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}",
+    }
+    for test_data, expected_result in sound_mark_tests.items():
+        assert (
+            decode_pc98_8bit_charset(encode_pc98_8bit_charset(test_data))
+            == expected_result
+        ), f"decode_pc98_8bit_charset(encode_pc98_8bit_charset({repr(test_data)})) returned:\n {repr(decode_pc98_8bit_charset(encode_pc98_8bit_charset(test_data)))}, expecting:\n {repr(expected_result)}"
 
 
 # i am sure this is not the best way to solve this. this mapping
@@ -513,9 +538,12 @@ def smoke_test_pc98_8bit_charset():
 # half-width ones, but Unicode is missing those so we live with
 # fullwidth instead. the arrows and control pictures shown here in the
 # first row are actually control characters and are not graphically
-# displayable on a PC-6001. The font data inside the PC-6001's
+# displayable on a PC-6001. the font data inside the PC-6001's
 # M5C6847P-1 is not normally used by PC-6001 software, but does
-# contain arrow graphics.
+# contain arrow graphics. likewise the extended graphics character set
+# in the PC-6001 mkII/SR and PC-6601/SR CGROM is rearely used by
+# software, but it also contains arrow graphics. those infrequently
+# used character sets are not handled here, though.
 PC6001_8BIT_CHARSET = (
     "␀␁␂␃␄␅␆␇␈␉␊␋␌␍␎␏␐␑␒␓␔␕␖␗␘␙␚␛￫￩￪￬"
     " !\"#$%&'()*+,-./0123456789:;<=>?"
@@ -593,7 +621,7 @@ def encode_pc6001_8bit_charset(s, try_harder=True):
                 s,
                 chars_consumed,
                 chars_consumed + 1,
-                f"no mapping for U+{ord(ch):04X} {unicodedata.name(ch, repr(ch))} in {repr(PC6001_8BIT_CHARMAP_COMPAT)}",
+                f"no mapping for U+{ord(ch):04X} {unicodedata.name(ch, repr(ch))}",
             )
         byts += byt
         chars_consumed += 1
