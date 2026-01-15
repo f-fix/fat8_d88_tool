@@ -284,7 +284,11 @@ def encode_pc98_8bit_charset(s, try_harder=True):
                 if unicodedata.name(s[i : i + 1], "?")
                 .lower()
                 .startswith("katakana letter")
-                else s[i : i + 1]
+                else (
+                    "~"
+                    if s[i : i + 1] == "\N{WAVE DASH}"
+                    else "-" if s[i : i + 1] == "\N{HYPHEN}" else s[i : i + 1]
+                )
             )
             for i in range(len(s))
         ]
@@ -298,7 +302,7 @@ def encode_pc98_8bit_charset(s, try_harder=True):
         if byt is None and try_harder:
             cch = unicodedata.normalize("NFKD", ch)
             byt = PC98_8BIT_CHARMAP.get(cch, PC98_8BIT_CHARMAP_COMPAT.get(cch)) or (
-                bytes([ord(cch)]) if ord(cch) <= 0x7F else None
+                bytes([ord(cch)]) if len(cch) == 1 and ord(cch) <= 0x7F else None
             )
         if byt is None:
             raise UnicodeEncodeError(
@@ -488,21 +492,36 @@ def smoke_test_pc98_8bit_charset():
         decode_pc98_8bit_charset(pc98_8bit_test, preserve=ASCII_CONTROLS)
         == expected_ascii_controls_unicode
     ), f"decode_pc98_8bit_charset({repr(pc98_8bit_test)}, preserve=ASCII_CONTROLS) returned:\n {repr(decode_pc98_8bit_charset(pc98_8bit_test, preserve=ASCII_CONTROLS))}, expecting:\n {repr(expected_ascii_controls_unicode)}"
+    assert encode_pc98_8bit_charset(PC98_8BIT_CHARSET) == bytes(
+        [i for i in range(256)]
+    ), f"encode_pc98_8bit_charset(PC98_8BIT_CHARSET)) returned:\n {repr(encode_pc98_8bit_charset(PC98_8BIT_CHARSET))}, expecting:\n {repr(bytes([i for i in range(256)]))}"
+    assert (
+        decode_pc98_8bit_charset(bytes([i for i in range(256)]), preserve=NO_CONTROLS)
+        == PC98_8BIT_CHARSET
+    ), f"decode_pc98_8bit_charset(bytes([i for i in range(256)]), preserve=NO_CONTROLS) returned:\n {repr(decode_pc98_8bit_charset(bytes([i for i in range(256)])), preserve=NO_CONTROLS)}, expecting:\n {repr(PC98_8BIT_CHARSET)}"
 
 
 # i am sure this is not the best way to solve this. this mapping
 # should work OK for PC-6001/mkII/SR and PC-6601/SR. it does not
 # handle the alternate character set shift sequences well. it also
-# does not handle Kanji or PC-6001A charset at all! the mapping is
-# intentionally close to the PC-98 one above. the hiragana and kanji
-# here should all be half-width ones, but Unicode is missing those so
-# we live with fullwidth instead.
+# does not handle fullwidth Kanji (neither the subset built in to
+# mkII/SR and 6601/SR, nor the larger set present in the extended
+# Kanji ROM/RAM cartridge), additional single-byte graphics charsets
+# from PC-6001 mkII/SR and PC-6601/SR, semi-graphics charset, or
+# PC-6001A charset at all! the mapping is intentionally close to the
+# PC-98 one above. the hiragana and kanji here should all be
+# half-width ones, but Unicode is missing those so we live with
+# fullwidth instead. the arrows and control pictures shown here in the
+# first row are actually control characters and are not graphically
+# displayable on a PC-6001. The font data inside the PC-6001's
+# M5C6847P-1 is not normally used by PC-6001 software, but does
+# contain arrow graphics.
 PC6001_8BIT_CHARSET = (
     "␀␁␂␃␄␅␆␇␈␉␊␋␌␍␎␏␐␑␒␓␔␕␖␗␘␙␚␛￫￩￪￬"
     " !\"#$%&'()*+,-./0123456789:;<=>?"
     "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[¥]^_"
     "`abcdefghijklmnopqrstuvwxyz{¦}~␡"
-    "♠♥♦♣￮•をぁぃぅぇぉゃゅょっーあいうえおかきくけこさしすせそ"
+    "♠♥♦♣￮•をぁぃぅぇぉゃゅょっ\uf8f4あいうえおかきくけこさしすせそ"
     "\uf8f0｡｢｣､･ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ"
     "ﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ"
     "たちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわん\uf8f2\uf8f3"
@@ -517,6 +536,16 @@ PC6001_8BIT_CHARMAP_COMPAT = {
     unicodedata.normalize("NFKD", key): value
     for key, value in PC6001_8BIT_CHARMAP.items()
     if unicodedata.normalize("NFKD", key) != key
+} | {
+    "\N{KATAKANA-HIRAGANA VOICED SOUND MARK}": PC6001_8BIT_CHARMAP[
+        "\N{HALFWIDTH KATAKANA VOICED SOUND MARK}"
+    ],
+    "\N{KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK}": PC6001_8BIT_CHARMAP[
+        "\N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}"
+    ],
+    "\N{KATAKANA-HIRAGANA PROLONGED SOUND MARK}": PC6001_8BIT_CHARMAP[
+        "\N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}"
+    ],
 }
 
 
@@ -533,7 +562,11 @@ def encode_pc6001_8bit_charset(s, try_harder=True):
                     .lower()
                     .startswith("katakana letter")
                 )
-                else s[i : i + 1]
+                else (
+                    "~"
+                    if s[i : i + 1] == "\N{WAVE DASH}"
+                    else "-" if s[i : i + 1] == "\N{HYPHEN}" else s[i : i + 1]
+                )
             )
             for i in range(len(s))
         ]
@@ -547,7 +580,12 @@ def encode_pc6001_8bit_charset(s, try_harder=True):
         if byt is None and try_harder:
             cch = unicodedata.normalize("NFKD", ch)
             byt = PC6001_8BIT_CHARMAP.get(cch, PC6001_8BIT_CHARMAP_COMPAT.get(cch)) or (
-                bytes([ord(cch)]) if ord(cch) <= 0x7F else None
+                bytes([ord(cch)]) if len(cch) == 1 and ord(cch) <= 0x7F else None
+            )
+        if byt is None and try_harder:
+            cch = unicodedata.normalize("NFC", ch)
+            byt = PC6001_8BIT_CHARMAP.get(cch, PC6001_8BIT_CHARMAP_COMPAT.get(cch)) or (
+                bytes([ord(cch)]) if len(cch) == 1 and ord(cch) <= 0x7F else None
             )
         if byt is None:
             raise UnicodeEncodeError(
@@ -555,7 +593,7 @@ def encode_pc6001_8bit_charset(s, try_harder=True):
                 s,
                 chars_consumed,
                 chars_consumed + 1,
-                f"no mapping for U+{ord(ch):04X} {unicodedata.name(ch, repr(ch))}",
+                f"no mapping for U+{ord(ch):04X} {unicodedata.name(ch, repr(ch))} in {repr(PC6001_8BIT_CHARMAP_COMPAT)}",
             )
         byts += byt
         chars_consumed += 1
@@ -671,7 +709,7 @@ def smoke_test_pc6001_8bit_charset():
             (
                 b"\\\x84\x14L\x85\x14Lo/ I \x81 PC6001!",
                 b"\xca\xdf\xcb\xdf\xba\xdd\x96\xde\x14M\x9d\x97\xe3\xde\x9d!",
-                b"\xa2\xca\xdf\xcb\xdf\xba\xdd\xa3\xea \xe6\x8f\xee\xdf\xfd\xe3\xde\xfd\x97 \x96\xde \x9e\x92\x9f\xde\x93\x9c\xe08\xcb\xde\xaf\xc4\xba\xdd\xcb\xdf\xad\x90\xc0\xe3\xde\xa4\xf4\x9d\x92\x9a\xe4\x96\xf7 \x92\xe1\x9c\xde\x97 \xe6\xfd\x97 \x86 \xea\x98\x9c\xef\x9c\xe0\xa1",
+                b"\xa2\xca\xdf\xcb\xdf\xba\xdd\xa3\xea \xe6\x8f\xee\xdf\xfd\xe3\xde\xfd\x97 \x96\xde \x9e\x92\x9f\xde\x93\x9c\xe08\xcb\xde\xaf\xc4\xba\xdd\xcb\xdf\xad\xb0\xc0\xe3\xde\xa4\xf4\x9d\x92\x9a\xe4\x96\xf7 \x92\xe1\x9c\xde\x97 \xe6\xfd\x97 \x86 \xea\x98\x9c\xef\x9c\xe0\xa1",
                 b"\xa2!?\xa3 \xa5\xa5\xa5",
                 b"\x14F||~-\xb0\x14G_",
                 b"\\0=0\x149",
@@ -705,7 +743,7 @@ def smoke_test_pc6001_8bit_charset():
             (
                 "¥￮╳•╳o/ I ♥ PC6001!",
                 "ﾊﾟﾋﾟｺﾝが大すきです!",
-                "｢ﾊﾟﾋﾟｺﾝ｣は にっぽんでんき が せいぞうした8ﾋﾞｯﾄｺﾝﾋﾟｭーﾀで､やすいことから いちじき にんき を はくしました｡",
+                "｢ﾊﾟﾋﾟｺﾝ｣は にっぽんでんき が せいぞうした8ﾋﾞｯﾄｺﾝﾋﾟｭｰﾀで､やすいことから いちじき にんき を はくしました｡",
                 "｢!?｣ ･･･",
                 "│¦¦~-ｰ─_",
                 "¥0=0円",
@@ -731,7 +769,7 @@ def smoke_test_pc6001_8bit_charset():
             (
                 "¥￮╳•╳o/ I ♥ PC6001!",
                 "ﾊﾟﾋﾟｺﾝが大すきです!",
-                "｢ﾊﾟﾋﾟｺﾝ｣は にっぽんでんき が せいぞうした8ﾋﾞｯﾄｺﾝﾋﾟｭーﾀで､やすいことから いちじき にんき を はくしました｡",
+                "｢ﾊﾟﾋﾟｺﾝ｣は にっぽんでんき が せいぞうした8ﾋﾞｯﾄｺﾝﾋﾟｭｰﾀで､やすいことから いちじき にんき を はくしました｡",
                 "｢!?｣ ･･･",
                 "│¦¦~-ｰ─_",
                 "¥0=0円",
@@ -754,7 +792,7 @@ def smoke_test_pc6001_8bit_charset():
             (
                 "¥￮╳•╳o/ I ♥ PC6001!",
                 "ﾊﾟﾋﾟｺﾝが大すきです!",
-                "｢ﾊﾟﾋﾟｺﾝ｣は にっぽんでんき が せいぞうした8ﾋﾞｯﾄｺﾝﾋﾟｭーﾀで､やすいことから いちじき にんき を はくしました｡",
+                "｢ﾊﾟﾋﾟｺﾝ｣は にっぽんでんき が せいぞうした8ﾋﾞｯﾄｺﾝﾋﾟｭｰﾀで､やすいことから いちじき にんき を はくしました｡",
                 "｢!?｣ ･･･",
                 "│¦¦~-ｰ─_",
                 "¥0=0円",
@@ -772,6 +810,35 @@ def smoke_test_pc6001_8bit_charset():
         decode_pc6001_8bit_charset(pc6001_8bit_test, preserve=ASCII_CONTROLS)
         == expected_ascii_controls_unicode
     ), f"decode_pc6001_8bit_charset({repr(pc6001_8bit_test)}, preserve=ASCII_CONTROLS) returned:\n {repr(decode_pc6001_8bit_charset(pc6001_8bit_test, preserve=ASCII_CONTROLS))}, expecting:\n {repr(expected_ascii_controls_unicode)}"
+    assert encode_pc6001_8bit_charset(PC6001_8BIT_CHARSET) == bytes(
+        [i for i in range(256)]
+    ), f"encode_pc6001_8bit_charset(PC6001_8BIT_CHARSET)) returned:\n {repr(encode_pc6001_8bit_charset(PC6001_8BIT_CHARSET))}, expecting:\n {repr(bytes([i for i in range(256)]))}"
+    assert (
+        decode_pc6001_8bit_charset(bytes([i for i in range(256)]), preserve=NO_CONTROLS)
+        == PC6001_8BIT_CHARSET
+    ), f"decode_pc6001_8bit_charset(bytes([i for i in range(256)]), preserve=NO_CONTROLS) returned:\n {repr(decode_pc6001_8bit_charset(bytes([i for i in range(256)])), preserve=NO_CONTROLS)}, expecting:\n {repr(PC6001_8BIT_CHARSET)}"
+    expected_altcharset_bytes = b"".join([bytes([0x14, i + 0x30]) for i in range(32)])
+    assert (
+        encode_pc6001_8bit_charset(PC6001_8BIT_ALTCHARSET) == expected_altcharset_bytes
+    ), f"encode_pc6001_8bit_charset(PC6001_8BIT_ALTCHARSET)) returned:\n {repr(encode_pc6001_8bit_charset(PC6001_8BIT_ALTCHARSET))}, expecting:\n {repr(expected_altcharset_bytes)}"
+    assert (
+        decode_pc6001_8bit_charset(expected_altcharset_bytes) == PC6001_8BIT_ALTCHARSET
+    ), f"decode_pc6001_8bit_charset({repr(expected_altcharset_bytes)}, preserve=NO_CONTROLS) returned:\n {repr(decode_pc6001_8bit_charset(expected_altcharset_bytes, preserve=NO_CONTROLS))}, expecting:\n {repr(PC6001_8BIT_ALTCHARSET)}"
+    sound_mark_tests = {
+        "[\N{COMBINING KATAKANA-HIRAGANA VOICED SOUND MARK}] = \N{COMBINING KATAKANA-HIRAGANA VOICED SOUND MARK}": "[\N{HALFWIDTH KATAKANA VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA VOICED SOUND MARK}",
+        "[\N{COMBINING KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK}] = \N{COMBINING KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK}": "[\N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}",
+        "[\N{KATAKANA-HIRAGANA VOICED SOUND MARK}] = \N{KATAKANA-HIRAGANA VOICED SOUND MARK}": "[\N{HALFWIDTH KATAKANA VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA VOICED SOUND MARK}",
+        "[\N{KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK}] = \N{KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK}": "[\N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}",
+        "[\N{KATAKANA-HIRAGANA PROLONGED SOUND MARK}] = \N{KATAKANA-HIRAGANA PROLONGED SOUND MARK}": "[\N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}] = \N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}",
+        "[\N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}] = \N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}": "[\N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}] = \N{HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK}",
+        "[\N{HALFWIDTH KATAKANA VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA VOICED SOUND MARK}": "[\N{HALFWIDTH KATAKANA VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA VOICED SOUND MARK}",
+        "[\N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}": "[\N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}] = \N{HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK}",
+    }
+    for test_data, expected_result in sound_mark_tests.items():
+        assert (
+            decode_pc6001_8bit_charset(encode_pc6001_8bit_charset(test_data))
+            == expected_result
+        ), f"decode_pc6001_8bit_charset(encode_pc6001_8bit_charset({repr(test_data)})) returned:\n {repr(decode_pc6001_8bit_charset(encode_pc6001_8bit_charset(test_data)))}, expecting:\n {repr(expected_result)}"
 
 
 # File data obfuscation schemes
@@ -1833,7 +1900,9 @@ def analyze_metadata_track(
                         extend_name(host_fs_deobf_name.lower(), disambig_deobf)
                         in used_lower_fs_names
                     ):
-                        disambig_deobf = f" ({1 + int(disambig_deobf.strip(' ()') or 1)})"
+                        disambig_deobf = (
+                            f" ({1 + int(disambig_deobf.strip(' ()') or 1)})"
+                        )
                     host_fs_deobf_name = extend_name(host_fs_deobf_name, disambig_deobf)
                     if PSEUDO_ATTR_UNUSED in fattrs:
                         # directory listing terminates at the first unused entry
